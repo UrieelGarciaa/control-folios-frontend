@@ -159,7 +159,7 @@ export default function App() {
   const [userRole, setUserRole] = useState("Control de accesos");
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authPassword, setAuthPassword] = useState("");
-  const ADMIN_PASSWORD = "56390";
+  const ADMIN_PASSWORD = "1234";
 
   /* Dialog LLEGÓ */
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -209,7 +209,6 @@ export default function App() {
   }, []);
 
   /* ---------- Totales y conteos basados en la tabla (TITSA) ---------- */
-  // Total (día) debe reflejar únicamente los folios que ya están en la tabla para la fecha seleccionada
   const totalCountForDay = useMemo(() => {
     return titsaRows.filter((r) => (mainFecha ? r.fecha === mainFecha : true)).length;
   }, [titsaRows, mainFecha]);
@@ -761,6 +760,89 @@ export default function App() {
     setManualHorarios((prev) => ({ ...prev, [linea]: value }));
   };
 
+  /* ---------- Export helpers (Agrupar folios por línea + horario en una sola celda) ---------- */
+  const buildExportData = () => {
+    // Build rows grouped by fecha (use fechaGeneracion) -> linea -> horario -> folios array
+    const rows = [];
+    const fechaKey = fechaGeneracion || mainFecha;
+
+    Object.keys(lineasTelefonosState).forEach((linea) => {
+      // collect folios from titsaRows for this line and selected fecha
+      const folios = titsaRows.filter((r) => r.linea === linea && r.fecha === fechaKey);
+      if (folios.length === 0) return;
+
+      // group by horario
+      const horariosMap = {};
+      folios.forEach((f) => {
+        const h = f.horaProgramada || "";
+        if (!horariosMap[h]) horariosMap[h] = [];
+        horariosMap[h].push(f.folio);
+      });
+
+      Object.keys(horariosMap).forEach((horario) => {
+        rows.push({
+          fecha: formatDisplayDate(fechaKey),
+          linea,
+          horario,
+          folios: horariosMap[horario] // array of folios (will join later)
+        });
+      });
+    });
+
+    return rows;
+  };
+
+  const handleExportExcel = () => {
+    if (userRole !== "Administrador") {
+      alert("Solo Administrador puede exportar.");
+      return;
+    }
+    const rowsToExport = buildExportData();
+    if (rowsToExport.length === 0) {
+      alert("No hay folios generados para exportar en la fecha seleccionada.");
+      return;
+    }
+    import("xlsx").then((XLSX) => {
+      const sheetData = rowsToExport.map((r) => ({
+        Fecha: r.fecha,
+        Línea: r.linea,
+        Horario: r.horario,
+        Folios: r.folios.join(", ")
+      }));
+      const ws = XLSX.utils.json_to_sheet(sheetData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Citas");
+      XLSX.writeFile(wb, `citas_${(fechaGeneracion || mainFecha).replace(/-/g, "")}.xlsx`);
+    }).catch((err) => {
+      console.error(err);
+      alert("Error al exportar Excel.");
+    });
+  };
+
+  const handleExportPDF = () => {
+    if (userRole !== "Administrador") {
+      alert("Solo Administrador puede exportar.");
+      return;
+    }
+    const rowsToExport = buildExportData();
+    if (rowsToExport.length === 0) {
+      alert("No hay folios generados para exportar en la fecha seleccionada.");
+      return;
+    }
+    import("jspdf").then((jsPDF) => {
+      import("jspdf-autotable").then(() => {
+        const doc = new jsPDF.default();
+        const head = [["Fecha", "Línea", "Horario", "Folios"]];
+        const body = rowsToExport.map((r) => [r.fecha, r.linea, r.horario, r.folios.join(", ")]);
+        doc.autoTable({ head, body, styles: { fontSize: 9 } });
+        doc.save(`citas_${(fechaGeneracion || mainFecha).replace(/-/g, "")}.pdf`);
+      });
+    }).catch((err) => {
+      console.error(err);
+      alert("Error al exportar PDF.");
+    });
+  };
+
   /* ---------- Render ---------- */
   return (
     <Container sx={{ py: 3 }}>
@@ -1004,7 +1086,7 @@ export default function App() {
         </Box>
       )}
 
-      {/* -------------------- Arcelormittal (GENERACIÓN + Gestión de líneas) -------------------- */}
+      {/* -------------------- Arcelormittal (GENERACIÓN + Gestión de líneas + Export) -------------------- */}
       {tab === 1 && (
         <Box>
           <Box sx={{ mb: 2 }}>
@@ -1032,6 +1114,15 @@ export default function App() {
                   <Typography variant="subtitle2">No Llegados</Typography>
                   <Typography variant="h6">{noLlegadosCount}</Typography>
                 </Paper>
+              </Grid>
+
+              <Grid item xs={12} md={4} sx={{ textAlign: "right" }}>
+                {userRole === "Administrador" && (
+                  <Box sx={{ display: "inline-flex", gap: 1 }}>
+                    <Button variant="contained" color="secondary" onClick={handleExportExcel}>Exportar Excel</Button>
+                    <Button variant="contained" color="secondary" onClick={handleExportPDF}>Exportar PDF</Button>
+                  </Box>
+                )}
               </Grid>
             </Grid>
           </Box>
