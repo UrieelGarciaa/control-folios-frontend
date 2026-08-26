@@ -20,50 +20,35 @@ import {
   Select,
   InputLabel,
   FormControl,
-  Chip,
+  MenuItem,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  MenuItem
+  Chip
 } from "@mui/material";
 
-/**
- * App.js
- *
- * Funcionalidades incluidas:
- * - Gestión de folios (TITSA) con filtros por fecha, estado, horario y búsqueda.
- * - Generación automática y manual de folios para Arcelormittal.
- * - Folios consecutivos persistentes por mes en localStorage (YYYYMM + 3 dígitos).
- * - Mensajes preparados por línea y envío vía WhatsApp Web.
- * - Recuadros superiores actúan como filtros toggle en TITSA; en Arcelormittal se muestran arriba (solo visualización).
- * - El recuadro "Total (día)" refleja el total de folios creados para la fecha seleccionada.
- * - Colores diferenciados en recuadros y chips de estado (Fase 1 - Punto 2).
- */
-
-/* ---------- Paleta de colores (puedes ajustar a identidad corporativa) ---------- */
+/* ---------- Paleta de colores ---------- */
 const COLORS = {
-  totalBg: "#e0e0e0", // gris neutro
-  pendientesBg: "#fff59d", // amarillo claro
-  llegoBg: "#81c784", // verde claro
-  noLlegoBg: "#e57373", // rojo claro
+  totalBg: "#e0e0e0",
+  pendientesBg: "#fff59d",
+  llegoBg: "#81c784",
+  noLlegoBg: "#e57373",
   pendientesText: "#000000",
   llegoText: "#ffffff",
   noLlegoText: "#ffffff"
 };
 
-/* ---------- Helpers de fecha y parseo en hora local ---------- */
+/* ---------- Helpers de fecha ---------- */
 const parseLocalDate = (isoDateStr) => {
   if (!isoDateStr) return new Date();
   return new Date(`${isoDateStr}T00:00:00`);
 };
-
 const formatDisplayDate = (isoDate) => {
   if (!isoDate) return "";
   const d = typeof isoDate === "string" ? parseLocalDate(isoDate) : new Date(isoDate);
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 };
-
 const formatDisplayDateTime = (isoDateTime) => {
   if (!isoDateTime) return "";
   const d = new Date(isoDateTime);
@@ -72,71 +57,7 @@ const formatDisplayDateTime = (isoDateTime) => {
   return `${date} ${time}`;
 };
 
-/* ---------- Todas las líneas transportistas ---------- */
-const lineasTelefonos = {
-  "AU0033 AUTO LINEAS PERALES SA DE CV": "8122028086",
-  "VA2748 JUAN MANUEL VALDES AGUILAR": "8122028086",
-  "SA5464 LOURDES DE ROCIO SALAZAR RODRIGUEZ": "8122028086",
-  "TR6962 TRANSPORTES RAMOS DEL NORESTE": "8122028086",
-  "RS0005 RS-MA MATERIALS SA DE CV": "8122028086",
-  "SA5461 JUAN BERNARDO SALDAÑA DE LA ROSA": "8122028086",
-  "ZA4556 JOSE ANGEL ZACARIAS SANCHEZ": "8122028086",
-  "DX0002 DX XPRESS SA DE CV": "8122028086",
-  "RO2943 ANGEL MARIO RODRIGUEZ PEDRAZA": "8122028086",
-  "OS0010 OSCAR VILLANUEVA RAMOS": "8122028086",
-  "SA5463 RAFAEL FERNANDO SALDAÑA SALDAÑA": "8122028086",
-  "AL6940 MONICA PATRICIA ALVAREZ VILLARRUEL": "8122028086",
-  "AG5104 XOCHITL YANETH AGUIRRE GUERRA": "8122028086",
-  "AU4231 AUTOLINEAS MRD SA DE CV": "8122028086",
-  "MX0002 MXG CARRIER SA DE CV": "8122028086",
-  "AU4219 AUTO FLETES TRT SA DE CV": "8122028086",
-  "VI1826 NORMA ANGELICA VIZCARRA JIMENEZ": "8122028086",
-  "AU4235 AUTO EXPRESS AGUIRRE SA DE CV": "8122028086",
-  "TR6978 TRANSPORTES ALEDQUI SA DE CV": "8122028086",
-  "TR6925 TRANSERVICIOS LOGISTICOS DEL NORTE SA DE CV (TLN)": "8122028086"
-};
-
-/* Remitentes (números desde los que se "envía") */
-const remitentes = {
-  "Alan Bustos": "8122028086",
-  "Aldo Ramirez": "8122028086",
-  "Otro": ""
-};
-
-/* Datos iniciales de ejemplo */
-const initialTitsaData = [
-  {
-    id: 1,
-    fecha: "2026-08-24",
-    folio: 202608001,
-    horaProgramada: "6:00am a 8:00am",
-    linea: "AU0033 AUTO LINEAS PERALES SA DE CV",
-    estado: "Pendiente",
-    eco: "",
-    fechaHoraLlegada: ""
-  },
-  {
-    id: 2,
-    fecha: "2026-08-24",
-    folio: 202608002,
-    horaProgramada: "6:00am a 8:00am",
-    linea: "VA2748 JUAN MANUEL VALDES AGUILAR",
-    estado: "Pendiente",
-    eco: "",
-    fechaHoraLlegada: ""
-  },
-  {
-    id: 3,
-    fecha: "2026-08-24",
-    folio: 202608003,
-    horaProgramada: "6:00am a 8:00am",
-    linea: "SA5464 LOURDES DE ROCIO SALAZAR RODRIGUEZ",
-    estado: "Pendiente",
-    eco: "",
-    fechaHoraLlegada: ""
-  }
-];
-
+/* ---------- Horarios ---------- */
 const horariosArcelor = [
   { label: "6:00am a 8:00am", inicio: 6, fin: 8 },
   { label: "8:00am a 10:00am", inicio: 8, fin: 10 },
@@ -146,16 +67,61 @@ const horariosArcelor = [
   { label: "4:00pm a 6:00pm", inicio: 16, fin: 18 }
 ];
 
-/* ---------- Helpers para folios persistentes por mes ---------- */
+/* ---------- Valores iniciales para líneas y unidades ---------- */
+const INITIAL_LINEAS_TELEFONOS = {
+  "AUTO LINEAS PERALES SA DE CV": "8180118971",
+  "JUAN MANUEL VALDES AGUILAR": "8661019151",
+  "LOURDES DE ROCIO SALAZAR RODRIGUEZ": "8661359355",
+  "TRANSPORTES RAMOS DEL NORESTE": "8181200896",
+  "RS-MA MATERIALS SA DE CV": "8118092949",
+  "JUAN BERNARDO SALDAÑA DE LA ROSA": "8211225603",
+  "JOSE ANGEL ZACARIAS SANCHEZ": "8187075009",
+  "DX XPRESS SA DE CV": "8183096615",
+  "ANGEL MARIO RODRIGUEZ PEDRAZA": "8212116936",
+  "OSCAR VILLANUEVA RAMOS": "8117997206",
+  "RAFAEL FERNANDO SALDAÑA SALDAÑA": "8211181151",
+  "MONICA PATRICIA ALVAREZ VILLARRUEL": "8666424871",
+  "XOCHITL YANETH AGUIRRE GUERRA": "8261260247",
+  "AUTOLINEAS MRD SA DE CV": "8661701305",
+  "MXG CARRIER SA DE CV": "8121474120",
+  "AUTO FLETES TRT SA DE CV": "8119889214",
+  "NORMA ANGELICA VIZCARRA JIMENEZ": "8110122302",
+  "AUTO EXPRESS AGUIRRE SA DE CV": "8661239826",
+  "TRANSPORTES ALEDQUI SA DE CV": "8135990348",
+  "TRANSERVICIOS LOGISTICOS DEL NORTE SA DE CV (TLN)": "8124224662"
+};
+
+const INITIAL_LINEAS_UNIDADES = {
+  "AUTO LINEAS PERALES SA DE CV": 25,
+  "JUAN MANUEL VALDES AGUILAR": 13,
+  "LOURDES DE ROCIO SALAZAR RODRIGUEZ": 12,
+  "TRANSPORTES RAMOS DEL NORESTE": 21,
+  "RS-MA MATERIALS SA DE CV": 11,
+  "JUAN BERNARDO SALDAÑA DE LA ROSA": 6,
+  "JOSE ANGEL ZACARIAS SANCHEZ": 11,
+  "DX XPRESS SA DE CV": 13,
+  "ANGEL MARIO RODRIGUEZ PEDRAZA": 8,
+  "OSCAR VILLANUEVA RAMOS": 10,
+  "RAFAEL FERNANDO SALDAÑA SALDAÑA": 10,
+  "MONICA PATRICIA ALVAREZ VILLARRUEL": 3,
+  "XOCHITL YANETH AGUIRRE GUERRA": 4,
+  "AUTOLINEAS MRD SA DE CV": 5,
+  "MXG CARRIER SA DE CV": 1,
+  "AUTO FLETES TRT SA DE CV": 1,
+  "NORMA ANGELICA VIZCARRA JIMENEZ": 2,
+  "AUTO EXPRESS AGUIRRE SA DE CV": 3,
+  "TRANSPORTES ALEDQUI SA DE CV": 1,
+  "TRANSERVICIOS LOGISTICOS DEL NORTE SA DE CV (TLN)": 2
+};
+
+/* ---------- Helpers folios ---------- */
 const getYYYYMM = (isoDateStr) => {
   const d = isoDateStr ? parseLocalDate(isoDateStr) : new Date();
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${yyyy}${mm}`; // e.g., "202608"
+  return `${yyyy}${mm}`;
 };
-
 const storageKeyForMonth = (yyyymm) => `folioSeq_${yyyymm}`;
-
 const getNextFolios = (count, fechaReferencia) => {
   const yyyymm = getYYYYMM(fechaReferencia);
   const key = storageKeyForMonth(yyyymm);
@@ -171,72 +137,103 @@ const getNextFolios = (count, fechaReferencia) => {
   return folios;
 };
 
-/* ---------- Helper para parsear hora desde label tipo "2:00pm a 4:00pm" ---------- */
-const parseHourFromLabel = (label) => {
-  if (!label) return null;
-  const re = /(\d{1,2}):(\d{2})\s*(am|pm)/i;
-  const m = label.match(re);
-  if (!m) {
-    const m2 = label.match(/^(\d{1,2})/);
-    if (!m2) return null;
-    return parseInt(m2[1], 10);
-  }
-  let hour = parseInt(m[1], 10);
-  const ampm = m[3].toLowerCase();
-  if (ampm === "pm" && hour !== 12) hour += 12;
-  if (ampm === "am" && hour === 12) hour = 0;
-  return hour;
-};
-
 /* ---------- Componente principal ---------- */
 export default function App() {
   const [tab, setTab] = useState(0);
 
-  /* TITSA */
-  const [titsaRows, setTitsaRows] = useState(initialTitsaData);
+  /* TITSA rows (inicia vacío) */
+  const [titsaRows, setTitsaRows] = useState([]);
   const [titsaSearch, setTitsaSearch] = useState("");
   const [showHistorial, setShowHistorial] = useState(false);
   const todayISO = new Date().toLocaleDateString("en-CA");
   const [mainFecha, setMainFecha] = useState(todayISO);
 
   const [selectedHora, setSelectedHora] = useState(null);
-  const [selectedEstado, setSelectedEstado] = useState(null); // null | "Pendiente" | "Llegó" | "No llegó" | "Total"
+  const [selectedEstado, setSelectedEstado] = useState(null);
 
-  /* Roles: Administrador y Control de accesos (equivalente a Supervisor) */
+  /* Fecha para generación */
+  const [fechaGeneracion, setFechaGeneracion] = useState(todayISO);
+
+  /* Roles and auth */
   const ROLES = ["Administrador", "Control de accesos"];
   const [userRole, setUserRole] = useState("Control de accesos");
-
-  /* --- bloqueo administrador: diálogo de autenticación --- */
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authPassword, setAuthPassword] = useState("");
-  const [pendingRole, setPendingRole] = useState(null); // guarda el rol que se intenta activar
-
-  // Contraseña fija para ejemplo. Cambia esto por verificación en backend o variable de entorno.
-  const ADMIN_PASSWORD = "1234";
+  const ADMIN_PASSWORD = "56390";
 
   /* Dialog LLEGÓ */
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogTargetId, setDialogTargetId] = useState(null);
   const [dialogEco, setDialogEco] = useState("");
 
-  /* Arcelormittal (generación) */
-  const [cantidadPorBloque, setCantidadPorBloque] = useState(5);
-  const [fechaGeneracion, setFechaGeneracion] = useState(todayISO);
-  const [selectedLinea, setSelectedLinea] = useState("");
-  const [selectedRango, setSelectedRango] = useState("");
+  /* Lines state (phones + units) and generated folios per line (assigned by repartition) */
+  const [lineasTelefonosState, setLineasTelefonosState] = useState(() => ({ ...INITIAL_LINEAS_TELEFONOS }));
+  const [lineasUnidadesState, setLineasUnidadesState] = useState(() => ({ ...INITIAL_LINEAS_UNIDADES }));
+  const [lineFoliosState, setLineFoliosState] = useState(() => {
+    const map = {};
+    Object.keys(INITIAL_LINEAS_TELEFONOS).forEach((l) => (map[l] = []));
+    return map;
+  });
 
-  /* Diálogo de selección de remitente */
-  const [contactDialogOpen, setContactDialogOpen] = useState(false);
-  const [selectedRemitente, setSelectedRemitente] = useState("Alan Bustos");
-  const [otroRemitenteTelefono, setOtroRemitenteTelefono] = useState("");
+  /* Admin add/edit UI */
+  const [nuevaLineaNombre, setNuevaLineaNombre] = useState("");
+  const [nuevaLineaTelefono, setNuevaLineaTelefono] = useState("");
+  const [nuevaLineaUnidades, setNuevaLineaUnidades] = useState("");
 
-  const [pendingMessagesByLine, setPendingMessagesByLine] = useState({});
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editLineaOriginalName, setEditLineaOriginalName] = useState("");
+  const [editLineaNombre, setEditLineaNombre] = useState("");
+  const [editLineaTelefono, setEditLineaTelefono] = useState("");
+  const [editLineaUnidades, setEditLineaUnidades] = useState(0);
+
+  /* Send preview dialog (per-line) */
+  const [sendPreviewOpen, setSendPreviewOpen] = useState(false);
+  const [sendPreviewLine, setSendPreviewLine] = useState("");
+  const [sendPreviewTel, setSendPreviewTel] = useState("");
+  const [sendPreviewMessage, setSendPreviewMessage] = useState("");
+
+  /* Per-row manual inputs (cantidad y horario) */
+  const [manualCounts, setManualCounts] = useState({});
+  const [manualHorarios, setManualHorarios] = useState({});
 
   const idCounterRef = useRef(Date.now());
+  const sendBufferRef = useRef({});
 
-  /* Filtrado: vista TITSA
-     - Aplica: fecha (mainFecha), showHistorial, búsqueda, selectedHora, selectedEstado
-  */
+  /* Initialize localStorage sequence for current month */
+  useEffect(() => {
+    const yyyymm = getYYYYMM(new Date().toLocaleDateString("en-CA"));
+    const key = storageKeyForMonth(yyyymm);
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, "0");
+    }
+  }, []);
+
+  /* ---------- Totales y conteos basados en la tabla (TITSA) ---------- */
+  // Total (día) debe reflejar únicamente los folios que ya están en la tabla para la fecha seleccionada
+  const totalCountForDay = useMemo(() => {
+    return titsaRows.filter((r) => (mainFecha ? r.fecha === mainFecha : true)).length;
+  }, [titsaRows, mainFecha]);
+
+  const pendientesCount = useMemo(() => {
+    return titsaRows.filter((r) => r.fecha === mainFecha && r.estado === "Pendiente").length;
+  }, [titsaRows, mainFecha]);
+
+  const llegadosCount = useMemo(() => {
+    return titsaRows.filter((r) => r.fecha === mainFecha && r.estado === "Llegó").length;
+  }, [titsaRows, mainFecha]);
+
+  const noLlegadosCount = useMemo(() => {
+    return titsaRows.filter((r) => r.fecha === mainFecha && r.estado === "No llegó").length;
+  }, [titsaRows, mainFecha]);
+
+  /* Conteo por horario basado en la tabla (muestra entre paréntesis) */
+  const horarioCounts = useMemo(() => {
+    return horariosArcelor.map((h) =>
+      titsaRows.filter((r) => r.fecha === mainFecha && r.horaProgramada === h.label).length
+    );
+  }, [titsaRows, mainFecha]);
+
+  /* Filters for TITSA table */
   const titSaFiltered = useMemo(() => {
     return titsaRows.filter((r) => {
       if (mainFecha && r.fecha !== mainFecha) return false;
@@ -254,12 +251,16 @@ export default function App() {
 
       if (selectedHora) {
         const hp = r.horaProgramada || "";
-        const hora = parseHourFromLabel(hp);
-        if (hora === null) return false;
-        if (!(hora >= selectedHora.inicio && hora < selectedHora.fin)) return false;
+        const re = /(\d{1,2}):(\d{2})\s*(am|pm)/i;
+        const m = hp.match(re);
+        if (!m) return false;
+        let hour = parseInt(m[1], 10);
+        const ampm = m[3].toLowerCase();
+        if (ampm === "pm" && hour !== 12) hour += 12;
+        if (ampm === "am" && hour === 12) hour = 0;
+        if (!(hour >= selectedHora.inicio && hour < selectedHora.fin)) return false;
       }
 
-      // selectedEstado === "Total" means "no estado filter"
       if (selectedEstado && selectedEstado !== "Total") {
         if (r.estado !== selectedEstado) return false;
       }
@@ -268,62 +269,59 @@ export default function App() {
     });
   }, [titsaRows, titsaSearch, showHistorial, mainFecha, selectedHora, selectedEstado]);
 
-  /* Contadores: Total del día seleccionado (mainFecha) y otros contadores aplicando filtros activos */
-  const totalCountForDay = useMemo(() => {
-    return titsaRows.filter((r) => (mainFecha ? r.fecha === mainFecha : true)).length;
-  }, [titsaRows, mainFecha]);
+  /* Toggle estado and hora */
+  const toggleEstadoFilter = (estado) => {
+    if (estado === "Total") {
+      setSelectedEstado((s) => (s === "Total" ? null : "Total"));
+      return;
+    }
+    setSelectedEstado((s) => (s === estado ? null : estado));
+  };
+  const toggleHoraFilter = (h) => {
+    setSelectedHora((prev) => (prev?.label === h.label ? null : h));
+  };
 
-  const pendientesCount = titSaFiltered.filter((r) => r.estado === "Pendiente").length;
-  const llegadosCount = titSaFiltered.filter((r) => r.estado === "Llegó").length;
-  const noLlegadosCount = titSaFiltered.filter((r) => r.estado === "No llegó").length;
+  /* Role change with auth */
+  const handleRoleChange = (newRole) => {
+    if (newRole === "Administrador") {
+      setAuthPassword("");
+      setAuthDialogOpen(true);
+    } else {
+      setUserRole(newRole);
+    }
+  };
+  const handleAuthConfirm = () => {
+    if (authPassword === ADMIN_PASSWORD) {
+      setUserRole("Administrador");
+      setAuthDialogOpen(false);
+      setAuthPassword("");
+    } else {
+      alert("Contraseña incorrecta. Se mantiene en Control de accesos.");
+      setUserRole("Control de accesos");
+      setAuthDialogOpen(false);
+      setAuthPassword("");
+    }
+  };
+  const handleAuthCancel = () => {
+    setAuthDialogOpen(false);
+    setAuthPassword("");
+    setUserRole("Control de accesos");
+  };
 
-  /* Para mostrar conteos por horario en los botones (sin aplicar selectedHora ni selectedEstado),
-     usamos un conjunto base que respeta fecha, búsqueda y showHistorial, pero no selectedHora ni selectedEstado.
-  */
-  const baseFilteredForHorarioCounts = useMemo(() => {
-    return titsaRows.filter((r) => {
-      if (mainFecha && r.fecha !== mainFecha) return false;
-      if (!showHistorial && r.estado !== "Pendiente") return false;
-      if (titsaSearch) {
-        const q = titsaSearch.toLowerCase();
-        return (
-          String(r.folio).toLowerCase().includes(q) ||
-          (r.linea && r.linea.toLowerCase().includes(q)) ||
-          (r.eco && String(r.eco).toLowerCase().includes(q)) ||
-          (r.horaProgramada && r.horaProgramada.toLowerCase().includes(q))
-        );
-      }
-      return true;
-    });
-  }, [titsaRows, titsaSearch, showHistorial, mainFecha]);
+  const canGenerate = userRole === "Administrador";
+  const canChangeEstado = userRole === "Administrador" || userRole === "Control de accesos";
 
-  const horarioCounts = useMemo(() => {
-    const map = {};
-    horariosArcelor.forEach((h) => {
-      map[h.label] = 0;
-    });
-    baseFilteredForHorarioCounts.forEach((r) => {
-      const hora = parseHourFromLabel(r.horaProgramada || "");
-      if (hora === null) return;
-      const found = horariosArcelor.find((h) => hora >= h.inicio && hora < h.fin);
-      if (found) map[found.label] = (map[found.label] || 0) + 1;
-    });
-    return map;
-  }, [baseFilteredForHorarioCounts]);
-
-  /* Dialog handlers LLEGÓ */
+  /* Dialog LLEGÓ handlers */
   const openLlegoDialog = (id) => {
     setDialogTargetId(id);
     setDialogEco("");
     setDialogOpen(true);
   };
-
   const handleDialogCancel = () => {
     setDialogOpen(false);
     setDialogTargetId(null);
     setDialogEco("");
   };
-
   const handleDialogAccept = () => {
     if (!dialogEco || !dialogTargetId) {
       alert("Escribe el No eco que llegó antes de aceptar.");
@@ -337,212 +335,433 @@ export default function App() {
           : r
       )
     );
-    setTitsaSearch("");
     setDialogOpen(false);
     setDialogTargetId(null);
     setDialogEco("");
+    // limpiar búsqueda para desfiltrar
+    setTitsaSearch("");
   };
-
   const handleMarcarNoLlego = (id) => {
     setTitsaRows((prev) => prev.map((r) => (r.id === id ? { ...r, estado: "No llegó" } : r)));
+    // limpiar búsqueda para desfiltrar
+    setTitsaSearch("");
   };
 
-  /* Diálogo de remitente/destinatarios */
+  /* Contact dialog (bulk) */
+  const [contactDialogOpen, setContactDialogOpen] = useState(false);
+  const [selectedRemitente, setSelectedRemitente] = useState("Alan Bustos");
+  const [otroRemitenteTelefono, setOtroRemitenteTelefono] = useState("");
+  const [pendingMessagesByLine, setPendingMessagesByLine] = useState({});
   const openContactDialogWithMessages = (messagesByLine) => {
     setPendingMessagesByLine(messagesByLine || {});
     setSelectedRemitente("Alan Bustos");
     setOtroRemitenteTelefono("");
     setContactDialogOpen(true);
   };
-
   const handleContactDialogCancel = () => {
     setContactDialogOpen(false);
     setPendingMessagesByLine({});
   };
-
   const handleContactDialogSend = () => {
-    const remitenteTelefono =
-      selectedRemitente === "Otro" ? (otroRemitenteTelefono || "").replace(/\D/g, "") : remitentes[selectedRemitente];
-
     Object.entries(pendingMessagesByLine).forEach(([linea, mensaje]) => {
-      const telefonoLinea = (lineasTelefonos[linea] || "").replace(/\D/g, "");
+      const telefonoLinea = (lineasTelefonosState[linea] || "").replace(/\D/g, "");
       if (!telefonoLinea) return;
-      const mensajeFinal = `${mensaje}\n\nEnviado desde: ${remitenteTelefono || selectedRemitente}`;
+      const mensajeFinal = `${mensaje}`;
       const url = `https://wa.me/52${telefonoLinea}?text=${encodeURIComponent(mensajeFinal)}`;
       window.open(url, "_blank");
     });
-
     setPendingMessagesByLine({});
     setContactDialogOpen(false);
   };
 
-  /* Generar automáticos */
+  /* ---------- Generar distribución automática (reparte 210 folios respetando topes) ----------
+     - Updates lineFoliosState only (refreshes assignments).
+     - Does NOT add records to titsaRows.
+  */
   const handleGenerarAutomaticos = () => {
+    if (!canGenerate) {
+      alert("Solo Administrador puede generar folios automáticos.");
+      return;
+    }
     if (!fechaGeneracion) {
       alert("Selecciona una fecha válida.");
       return;
     }
-    if (!window.confirm("¿Desea generar los folios automáticos?")) return;
+    if (!window.confirm("¿Desea repartir los 210 folios entre las líneas respetando el tope de unidades?")) return;
 
-    const lines = Object.keys(lineasTelefonos);
+    const lines = Object.keys(lineasTelefonosState);
     if (lines.length === 0) {
       alert("No hay líneas configuradas.");
       return;
     }
 
-    const nuevosRegistros = [];
-    const messagesByLine = {};
+    const TOTAL_POR_DIA = 210;
+    const HORARIOS_COUNT = horariosArcelor.length;
+    const TOTAL_POR_HORARIO = Math.floor(TOTAL_POR_DIA / HORARIOS_COUNT); // 35
 
-    lines.forEach((l) => {
-      messagesByLine[l] = `📅 Fecha: ${formatDisplayDate(fechaGeneracion)}\n\n`;
+    const assignedTotals = {};
+    lines.forEach((l) => (assignedTotals[l] = 0));
+    const newLineFolios = {};
+    lines.forEach((l) => (newLineFolios[l] = []));
+
+    horariosArcelor.forEach(() => {
+      let foliosToAssign = TOTAL_POR_HORARIO;
+
+      const remainingCap = {};
+      let totalRemaining = 0;
+      lines.forEach((l) => {
+        const cap = lineasUnidadesState[l] || 0;
+        const rem = Math.max(0, cap - assignedTotals[l]);
+        remainingCap[l] = rem;
+        totalRemaining += rem;
+      });
+
+      if (totalRemaining <= 0) return;
+
+      const provisional = {};
+      let allocated = 0;
+      lines.forEach((l) => {
+        if (remainingCap[l] <= 0) {
+          provisional[l] = 0;
+          return;
+        }
+        const share = Math.floor((remainingCap[l] / totalRemaining) * foliosToAssign);
+        const take = Math.min(share, remainingCap[l]);
+        provisional[l] = take;
+        allocated += take;
+      });
+
+      let remainder = foliosToAssign - allocated;
+      if (remainder > 0) {
+        const sortable = lines.filter((l) => remainingCap[l] > provisional[l]).sort((a, b) => remainingCap[b] - remainingCap[a]);
+        let idx = 0;
+        while (remainder > 0 && sortable.length > 0) {
+          const l = sortable[idx % sortable.length];
+          if (provisional[l] < remainingCap[l]) {
+            provisional[l] += 1;
+            remainder -= 1;
+          }
+          idx += 1;
+          if (idx > sortable.length * 5) break;
+        }
+      }
+
+      lines.forEach((linea) => {
+        const count = provisional[linea] || 0;
+        if (!count || count <= 0) return;
+        const folios = getNextFolios(count, fechaGeneracion);
+        newLineFolios[linea] = [...newLineFolios[linea], ...folios];
+        assignedTotals[linea] += count;
+      });
     });
 
-    horariosArcelor.forEach((horarioObj) => {
-      const totalPorHorario = 35;
-      const baseCount = Math.floor(totalPorHorario / lines.length);
-      const remainder = totalPorHorario % lines.length;
-      const counts = lines.map((_, idx) => baseCount + (idx < remainder ? 1 : 0));
+    // Replace previous assignments (refresh)
+    setLineFoliosState(() => {
+      const merged = {};
+      Object.keys(lineasTelefonosState).forEach((l) => {
+        merged[l] = newLineFolios[l] || [];
+      });
+      return merged;
+    });
 
-      lines.forEach((linea, idx) => {
-        const count = counts[idx];
-        if (!count || count <= 0) return;
+    alert("Distribución completada. Revisa 'Citas generadas' por línea. Usa 'Enviar citas' por línea para mandar los mensajes.");
+  };
 
-        const folios = getNextFolios(count, fechaGeneracion);
+  /* ---------- Preparar y enviar por línea ----------
+     - Uses assigned folios (lineFoliosState) or manualCount override.
+     - On confirm: creates titsaRows entries and clears assigned folios for that line.
+  */
+  const handlePrepareSendForLine = (linea) => {
+    const tel = (lineasTelefonosState[linea] || "").replace(/\D/g, "");
+    if (!tel) {
+      alert("No hay teléfono configurado para esta línea.");
+      return;
+    }
 
-        messagesByLine[linea] += `🕒 ${horarioObj.label}\n`;
-        folios.forEach((f) => {
-          messagesByLine[linea] += `- ${f}\n`;
+    const assigned = (lineFoliosState[linea] || []).slice();
+    const manualCount = Number(manualCounts[linea] || 0);
+
+    let foliosToSend = [];
+    if (manualCount > 0) {
+      foliosToSend = getNextFolios(manualCount, fechaGeneracion);
+    } else if (assigned.length > 0) {
+      foliosToSend = assigned.slice();
+    } else {
+      const unidades = lineasUnidadesState[linea] || 0;
+      if (unidades <= 0) {
+        alert("La línea no tiene unidades configuradas.");
+        return;
+      }
+      foliosToSend = getNextFolios(unidades, fechaGeneracion);
+    }
+
+    // Build message: include date, line name, "Citas asignadas" and list folios grouped by horario evenly (no "Otros")
+    let mensaje = `📅 Fecha: ${formatDisplayDate(fechaGeneracion)}\n🚚 Línea de transporte: ${linea}\n\n`;
+    mensaje += `Citas asignadas:\n\n`;
+
+    const count = foliosToSend.length;
+    const base = Math.floor(count / horariosArcelor.length);
+    let remainder = count - base * horariosArcelor.length;
+    let idx = 0;
+
+    horariosArcelor.forEach((h) => {
+      const take = base + (remainder > 0 ? 1 : 0);
+      remainder = Math.max(0, remainder - 1);
+      const slice = foliosToSend.slice(idx, idx + take);
+      if (slice.length > 0) {
+        mensaje += `🕒 ${h.label}\n`;
+        slice.forEach((f) => (mensaje += `- ${f}\n`));
+        mensaje += `\n`;
+      }
+      idx += take;
+    });
+
+    mensaje += `👉 Favor de presentarse en patio con todo el equipo completo de sujeción de rollo y 🦺 EPP completo.`;
+
+    // preview
+    setSendPreviewLine(linea);
+    setSendPreviewTel(tel);
+    setSendPreviewMessage(mensaje);
+    setSendPreviewOpen(true);
+
+    // store foliosToSend in buffer for confirm
+    sendBufferRef.current[linea] = foliosToSend;
+  };
+
+  const handleConfirmSendPreview = () => {
+    const linea = sendPreviewLine;
+    const tel = sendPreviewTel;
+    const foliosToSend = sendBufferRef.current[linea] || [];
+
+    if (!foliosToSend || foliosToSend.length === 0) {
+      alert("No hay folios para enviar.");
+      setSendPreviewOpen(false);
+      return;
+    }
+
+    // Create titsaRows entries for each folio and assign horarios:
+    const manualHorario = manualHorarios[linea] || "";
+    const nuevosRegistros = [];
+    const count = foliosToSend.length;
+
+    if (manualHorario) {
+      foliosToSend.forEach((f) => {
+        idCounterRef.current += 1;
+        nuevosRegistros.push({
+          id: idCounterRef.current,
+          fecha: fechaGeneracion,
+          folio: f,
+          horaProgramada: manualHorario,
+          linea,
+          estado: "Pendiente",
+          eco: "",
+          fechaHoraLlegada: ""
+        });
+      });
+    } else {
+      const base = Math.floor(count / horariosArcelor.length) || 1;
+      let remainder = count - base * horariosArcelor.length;
+      let idx = 0;
+      horariosArcelor.forEach((h) => {
+        const take = base + (remainder > 0 ? 1 : 0);
+        remainder = Math.max(0, remainder - 1);
+        const slice = foliosToSend.slice(idx, idx + take);
+        slice.forEach((f) => {
           idCounterRef.current += 1;
           nuevosRegistros.push({
             id: idCounterRef.current,
             fecha: fechaGeneracion,
             folio: f,
-            horaProgramada: horarioObj.label,
+            horaProgramada: h.label,
             linea,
             estado: "Pendiente",
             eco: "",
             fechaHoraLlegada: ""
           });
         });
-        messagesByLine[linea] += `\n`;
+        idx += take;
       });
-    });
+    }
 
-    Object.keys(messagesByLine).forEach((l) => {
-      messagesByLine[l] += `👉 Favor de presentarse en patio con todo el equipo completo de sujeción de rollo y 🦺 EPP completo.\n\n⚠️ Este mensaje es automático, favor de no responderlo ⚠️`;
-    });
-
+    // Add to titsaRows (these are the actual records)
     setTitsaRows((prev) => [...prev, ...nuevosRegistros]);
 
-    openContactDialogWithMessages(messagesByLine);
-  };
-
-  /* Generar manuales */
-  const handleGenerarManuales = () => {
-    if (!fechaGeneracion || !selectedLinea || !selectedRango || !cantidadPorBloque || Number(cantidadPorBloque) <= 0) {
-      alert("Completa todos los campos antes de enviar.");
-      return;
-    }
-    if (!window.confirm("¿Desea generar los folios manuales?")) return;
-
-    const count = Number(cantidadPorBloque);
-    const folios = getNextFolios(count, fechaGeneracion);
-
-    const nuevosRegistros = [];
-    let mensaje = `📅 Fecha: ${formatDisplayDate(fechaGeneracion)}\n🕒 Horario: ${selectedRango}\n🚚 Línea de transporte: ${selectedLinea}\n📦 Folios asignados:\n`;
-    folios.forEach((f) => {
-      mensaje += `- ${f}\n`;
-      idCounterRef.current += 1;
-      nuevosRegistros.push({
-        id: idCounterRef.current,
-        fecha: fechaGeneracion,
-        folio: f,
-        horaProgramada: selectedRango,
-        linea: selectedLinea,
-        estado: "Pendiente",
-        eco: "",
-        fechaHoraLlegada: ""
-      });
+    // Clear assigned folios for that line (so repartition will refresh next time)
+    setLineFoliosState((prev) => {
+      const copy = { ...prev };
+      copy[linea] = [];
+      return copy;
     });
-    mensaje += `\n👉 Favor de presentarse en patio con todo el equipo completo de sujeción de rollo y 🦺 EPP completo.\n\n⚠️ Este mensaje es automático, favor de no responderlo ⚠️`;
 
-    setTitsaRows((prev) => [...prev, ...nuevosRegistros]);
+    // Clear manual inputs for that line
+    setManualCounts((prev) => {
+      const copy = { ...prev };
+      delete copy[linea];
+      return copy;
+    });
+    setManualHorarios((prev) => {
+      const copy = { ...prev };
+      delete copy[linea];
+      return copy;
+    });
 
-    const messagesByLine = {
-      [selectedLinea]: mensaje
-    };
+    // Clear send buffer
+    delete sendBufferRef.current[linea];
 
-    openContactDialogWithMessages(messagesByLine);
+    // Open WhatsApp with the preview message
+    const url = `https://wa.me/52${tel}?text=${encodeURIComponent(sendPreviewMessage)}`;
+    window.open(url, "_blank");
+
+    setSendPreviewOpen(false);
+    setSendPreviewLine("");
+    setSendPreviewTel("");
+    setSendPreviewMessage("");
   };
 
-  /* Inicializar localStorage para el mes actual si no existe */
-  useEffect(() => {
-    const yyyymm = getYYYYMM(new Date().toLocaleDateString("en-CA"));
-    const key = storageKeyForMonth(yyyymm);
-    if (!localStorage.getItem(key)) {
-      localStorage.setItem(key, "0");
-    }
-  }, []);
-
-  /* Toggle estado desde recuadros
-     - "Total" representa explícitamente "no filtro" en la lógica de filtrado.
-     - selectedEstado === "Total" => UI muestra seleccionado; filtrado no aplica estado.
-  */
-  const toggleEstadoFilter = (estado) => {
-    if (estado === "Total") {
-      setSelectedEstado((s) => (s === "Total" ? null : "Total"));
+  /* ---------- Admin: agregar / eliminar / modificar líneas ---------- */
+  const handleAgregarLinea = () => {
+    if (userRole !== "Administrador") {
+      alert("Solo Administrador puede agregar líneas.");
       return;
     }
-    setSelectedEstado((s) => (s === estado ? null : estado));
-  };
+    const nombre = (nuevaLineaNombre || "").trim();
+    const telefono = (nuevaLineaTelefono || "").replace(/\D/g, "");
+    const unidades = Number(nuevaLineaUnidades);
 
-  /* Toggle horario */
-  const toggleHoraFilter = (h) => {
-    setSelectedHora((prev) => (prev?.label === h.label ? null : h));
-  };
-
-  /* --- manejo de cambio de rol con autenticación para Administrador --- */
-  const handleRoleChange = (newRole) => {
-    if (newRole === "Administrador") {
-      // abrir diálogo de autenticación sin cambiar el rol actual todavía
-      setPendingRole("Administrador");
-      setAuthPassword("");
-      setAuthDialogOpen(true);
-    } else {
-      // cambiar directamente a Control de accesos
-      setUserRole(newRole);
-      setPendingRole(null);
+    if (!nombre) {
+      alert("Ingresa el nombre de la línea.");
+      return;
     }
-  };
-
-  const handleAuthConfirm = () => {
-    if (authPassword === ADMIN_PASSWORD) {
-      setUserRole("Administrador");
-      setAuthDialogOpen(false);
-      setAuthPassword("");
-      setPendingRole(null);
-    } else {
-      alert("Contraseña incorrecta. Se mantiene en Control de accesos.");
-      setUserRole("Control de accesos");
-      setAuthDialogOpen(false);
-      setAuthPassword("");
-      setPendingRole(null);
+    if (!telefono || telefono.length < 7) {
+      alert("Ingresa un teléfono válido (solo dígitos).");
+      return;
     }
+    if (!unidades || unidades <= 0) {
+      alert("Ingresa un número de unidades válido (> 0).");
+      return;
+    }
+
+    setLineasTelefonosState((prev) => ({ ...prev, [nombre]: telefono }));
+    setLineasUnidadesState((prev) => ({ ...prev, [nombre]: unidades }));
+    setLineFoliosState((prev) => ({ ...prev, [nombre]: [] }));
+
+    setNuevaLineaNombre("");
+    setNuevaLineaTelefono("");
+    setNuevaLineaUnidades("");
   };
 
-  const handleAuthCancel = () => {
-    setAuthDialogOpen(false);
-    setAuthPassword("");
-    setPendingRole(null);
-    // mantener rol actual o forzar Control de accesos
-    setUserRole("Control de accesos");
+  const handleEliminarLinea = (linea) => {
+    if (userRole !== "Administrador") {
+      alert("Solo Administrador puede eliminar líneas.");
+      return;
+    }
+    if (!window.confirm(`¿Estás seguro que deseas eliminar la línea "${linea}"? Esta acción no se puede deshacer.`)) return;
+
+    setLineasTelefonosState((prev) => {
+      const copy = { ...prev };
+      delete copy[linea];
+      return copy;
+    });
+    setLineasUnidadesState((prev) => {
+      const copy = { ...prev };
+      delete copy[linea];
+      return copy;
+    });
+    setLineFoliosState((prev) => {
+      const copy = { ...prev };
+      delete copy[linea];
+      return copy;
+    });
+
+    setTitsaRows((prev) => prev.filter((r) => r.linea !== linea));
   };
 
-  /* Helper: whether current role can generate folios */
-  const canGenerate = userRole === "Administrador";
-  /* Helper: whether current role can change estado (Llegó / No llegó) */
-  const canChangeEstado = userRole === "Administrador" || userRole === "Control de accesos";
+  const openEditLineaDialog = (linea) => {
+    if (userRole !== "Administrador") {
+      alert("Solo Administrador puede modificar líneas.");
+      return;
+    }
+    setEditLineaOriginalName(linea);
+    setEditLineaNombre(linea);
+    setEditLineaTelefono(lineasTelefonosState[linea] || "");
+    setEditLineaUnidades(lineasUnidadesState[linea] ?? 0);
+    setEditDialogOpen(true);
+  };
 
+  const handleEditCancel = () => {
+    setEditDialogOpen(false);
+    setEditLineaOriginalName("");
+    setEditLineaNombre("");
+    setEditLineaTelefono("");
+    setEditLineaUnidades(0);
+  };
+
+  const handleEditConfirm = () => {
+    const nombreNuevo = (editLineaNombre || "").trim();
+    const telefonoNuevo = (editLineaTelefono || "").replace(/\D/g, "");
+    const unidadesNuevo = Number(editLineaUnidades);
+
+    if (!nombreNuevo) {
+      alert("El nombre de la línea no puede estar vacío.");
+      return;
+    }
+    if (!telefonoNuevo || telefonoNuevo.length < 7) {
+      alert("Ingresa un teléfono válido (solo dígitos).");
+      return;
+    }
+    if (isNaN(unidadesNuevo) || unidadesNuevo < 0) {
+      alert("Ingresa un número de unidades válido (>= 0).");
+      return;
+    }
+
+    if (!window.confirm(`Confirmar cambios para la línea "${editLineaOriginalName}"?`)) return;
+
+    setLineasTelefonosState((prev) => {
+      const copy = { ...prev };
+      if (nombreNuevo !== editLineaOriginalName) {
+        copy[nombreNuevo] = telefonoNuevo;
+        delete copy[editLineaOriginalName];
+      } else {
+        copy[nombreNuevo] = telefonoNuevo;
+      }
+      return copy;
+    });
+
+    setLineasUnidadesState((prev) => {
+      const copy = { ...prev };
+      if (nombreNuevo !== editLineaOriginalName) {
+        copy[nombreNuevo] = unidadesNuevo;
+        delete copy[editLineaOriginalName];
+      } else {
+        copy[nombreNuevo] = unidadesNuevo;
+      }
+      return copy;
+    });
+
+    setLineFoliosState((prev) => {
+      const copy = { ...prev };
+      if (nombreNuevo !== editLineaOriginalName) {
+        copy[nombreNuevo] = copy[editLineaOriginalName] || [];
+        delete copy[editLineaOriginalName];
+      }
+      return copy;
+    });
+
+    setTitsaRows((prev) => prev.map((r) => (r.linea === editLineaOriginalName ? { ...r, linea: nombreNuevo } : r)));
+
+    handleEditCancel();
+  };
+
+  /* ---------- Per-row manual inputs handlers ---------- */
+  const handleManualCountChange = (linea, value) => {
+    const v = value === "" ? "" : Math.max(0, Math.floor(Number(value) || 0));
+    setManualCounts((prev) => ({ ...prev, [linea]: v }));
+  };
+  const handleManualHorarioChange = (linea, value) => {
+    setManualHorarios((prev) => ({ ...prev, [linea]: value }));
+  };
+
+  /* ---------- Render ---------- */
   return (
     <Container sx={{ py: 3 }}>
       <Typography variant="h4" gutterBottom>Control Interno de Folios</Typography>
@@ -576,7 +795,7 @@ export default function App() {
       {tab === 0 && (
         <Box>
           <Grid container spacing={2} sx={{ mb: 2 }} alignItems="center">
-            <Grid item xs={6} md={2}>
+            <Grid item xs={12} md={2}>
               <Paper
                 sx={{
                   p: 2,
@@ -591,7 +810,7 @@ export default function App() {
                 <Typography variant="h6">{totalCountForDay}</Typography>
               </Paper>
             </Grid>
-            <Grid item xs={6} md={2}>
+            <Grid item xs={12} md={2}>
               <Paper
                 sx={{
                   p: 2,
@@ -606,7 +825,7 @@ export default function App() {
                 <Typography variant="h6">{pendientesCount}</Typography>
               </Paper>
             </Grid>
-            <Grid item xs={6} md={2}>
+            <Grid item xs={12} md={2}>
               <Paper
                 sx={{
                   p: 2,
@@ -621,7 +840,7 @@ export default function App() {
                 <Typography variant="h6">{llegadosCount}</Typography>
               </Paper>
             </Grid>
-            <Grid item xs={6} md={2}>
+            <Grid item xs={12} md={2}>
               <Paper
                 sx={{
                   p: 2,
@@ -637,7 +856,7 @@ export default function App() {
               </Paper>
             </Grid>
 
-            <Grid item xs={8} md={2}>
+            <Grid item xs={8} md={3}>
               <TextField
                 label="Fecha"
                 type="date"
@@ -662,8 +881,8 @@ export default function App() {
           </Grid>
 
           <Typography variant="h6" gutterBottom>Horarios de Entrada</Typography>
-          <Box sx={{ display: "flex", gap: 1, mb: 1, flexWrap: "wrap" }}>
-            {horariosArcelor.map((h) => (
+          <Box sx={{ display: "flex", gap: 1, mb: 1, flexWrap: "wrap", alignItems: "center" }}>
+            {horariosArcelor.map((h, idx) => (
               <Button
                 key={h.label}
                 variant={selectedHora?.label === h.label ? "contained" : "outlined"}
@@ -671,13 +890,13 @@ export default function App() {
                 size="small"
                 onClick={() => toggleHoraFilter(h)}
               >
-                {h.label} {`(${horarioCounts[h.label] || 0})`}
+                {`${h.label} (${horarioCounts[idx] || 0})`}
               </Button>
             ))}
           </Box>
 
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Última hora de entrada 6:00 PM
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+            Última hora para ingresar unidades 06:00pm
           </Typography>
 
           <Grid container spacing={2} sx={{ mb: 2 }}>
@@ -785,43 +1004,41 @@ export default function App() {
         </Box>
       )}
 
-      {/* -------------------- Arcelormittal (GENERACIÓN) -------------------- */}
+      {/* -------------------- Arcelormittal (GENERACIÓN + Gestión de líneas) -------------------- */}
       {tab === 1 && (
         <Box>
-          {/* Recuadros de visualización en Arcelormittal (arriba) */}
           <Box sx={{ mb: 2 }}>
             <Grid container spacing={2} sx={{ mb: 2 }} alignItems="center">
               <Grid item xs={6} md={2}>
                 <Paper sx={{ p: 2, textAlign: "center", bgcolor: COLORS.totalBg }}>
                   <Typography variant="subtitle2">Total (día)</Typography>
-                  <Typography variant="h6">{titsaRows.filter(r => (fechaGeneracion ? r.fecha === fechaGeneracion : true)).length}</Typography>
+                  <Typography variant="h6">{totalCountForDay}</Typography>
                 </Paper>
               </Grid>
               <Grid item xs={6} md={2}>
                 <Paper sx={{ p: 2, textAlign: "center", bgcolor: COLORS.pendientesBg, color: COLORS.pendientesText }}>
                   <Typography variant="subtitle2">Pendientes</Typography>
-                  <Typography variant="h6">{titsaRows.filter(r => r.fecha === fechaGeneracion && r.estado === "Pendiente").length}</Typography>
+                  <Typography variant="h6">{pendientesCount}</Typography>
                 </Paper>
               </Grid>
               <Grid item xs={6} md={2}>
                 <Paper sx={{ p: 2, textAlign: "center", bgcolor: COLORS.llegoBg, color: COLORS.llegoText }}>
                   <Typography variant="subtitle2">Llegados</Typography>
-                  <Typography variant="h6">{titsaRows.filter(r => r.fecha === fechaGeneracion && r.estado === "Llegó").length}</Typography>
+                  <Typography variant="h6">{llegadosCount}</Typography>
                 </Paper>
               </Grid>
               <Grid item xs={6} md={2}>
                 <Paper sx={{ p: 2, textAlign: "center", bgcolor: COLORS.noLlegoBg, color: COLORS.noLlegoText }}>
                   <Typography variant="subtitle2">No Llegados</Typography>
-                  <Typography variant="h6">{titsaRows.filter(r => r.fecha === fechaGeneracion && r.estado === "No llegó").length}</Typography>
+                  <Typography variant="h6">{noLlegadosCount}</Typography>
                 </Paper>
               </Grid>
             </Grid>
           </Box>
 
           <Grid container spacing={4} sx={{ mb: 2 }}>
-            {/* Lado izquierdo: Folios automáticos */}
             <Grid item xs={12} md={6}>
-              <Typography variant="subtitle1" gutterBottom>Folios automáticos</Typography>
+              <Typography variant="subtitle1" gutterBottom>Folios automáticos (repartir 210)</Typography>
 
               <TextField
                 label="Fecha"
@@ -840,83 +1057,202 @@ export default function App() {
                 onClick={handleGenerarAutomaticos}
                 disabled={!canGenerate}
               >
-                Generar folios automáticos y preparar envío
+                Repartir folios entre líneas (210)
               </Button>
             </Grid>
 
-            {/* Lado derecho: Folios manuales */}
             <Grid item xs={12} md={6}>
               <Typography variant="subtitle1" gutterBottom>Folios manuales</Typography>
 
-              <FormControl fullWidth sx={{ mb: 2 }} size="small">
-                <InputLabel id="select-linea-label">Línea de transporte</InputLabel>
-                <Select
-                  labelId="select-linea-label"
-                  value={selectedLinea}
-                  label="Línea de transporte"
-                  onChange={(e) => setSelectedLinea(e.target.value)}
-                >
-                  <MenuItem value="">Selecciona una línea</MenuItem>
-                  {Object.keys(lineasTelefonos).map((l) => (
-                    <MenuItem key={l} value={l}>{l}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              <TextField
-                label="Horario"
-                select
-                value={selectedRango}
-                onChange={(e) => setSelectedRango(e.target.value)}
-                fullWidth
-                sx={{ mb: 2 }}
-                size="small"
-              >
-                <MenuItem value="">Selecciona un horario</MenuItem>
-                {horariosArcelor.map((h) => (
-                  <MenuItem key={h.label} value={h.label}>{h.label}</MenuItem>
-                ))}
-              </TextField>
-
-              <TextField
-                label="Cantidad de folios"
-                type="number"
-                value={cantidadPorBloque}
-                onChange={(e) => setCantidadPorBloque(e.target.value)}
-                fullWidth
-                sx={{ mb: 2 }}
-                size="small"
-              />
-
-              <TextField
-                label="Fecha"
-                type="date"
-                value={fechaGeneracion}
-                onChange={(e) => setFechaGeneracion(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                fullWidth
-                sx={{ mb: 2 }}
-                size="small"
-              />
-
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleGenerarManuales}
-                disabled={!canGenerate}
-              >
-                Generar folios manuales y preparar envío
-              </Button>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                El botón de "Repartir folios" asigna internamente las citas a cada línea respetando su tope de unidades.
+                No se crean registros en la tabla hasta que uses "Enviar citas" por línea. Usa "Citas manuales" para generar una cantidad específica antes de enviar.
+              </Typography>
             </Grid>
           </Grid>
 
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Después de confirmar, selecciona desde qué número se enviará (remitente). El destinatario será el teléfono de la línea transportista. Si eliges "Otro", ingresa el número desde el que enviarás.
-          </Typography>
+          {/* ---------- Gestión de líneas (solo Administrador) ---------- */}
+          {userRole === "Administrador" && (
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="h6" gutterBottom>Gestión de líneas transportistas</Typography>
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={5}>
+                  <TextField
+                    label="Nombre de la línea"
+                    value={nuevaLineaNombre}
+                    onChange={(e) => setNuevaLineaNombre(e.target.value)}
+                    fullWidth
+                    size="small"
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    label="Teléfono (solo dígitos)"
+                    value={nuevaLineaTelefono}
+                    onChange={(e) => setNuevaLineaTelefono(e.target.value)}
+                    fullWidth
+                    size="small"
+                  />
+                </Grid>
+                <Grid item xs={12} md={2}>
+                  <TextField
+                    label="Unidades"
+                    type="number"
+                    value={nuevaLineaUnidades}
+                    onChange={(e) => setNuevaLineaUnidades(e.target.value)}
+                    fullWidth
+                    size="small"
+                  />
+                </Grid>
+                <Grid item xs={12} md={2}>
+                  <Button variant="contained" onClick={handleAgregarLinea} fullWidth>Agregar línea</Button>
+                </Grid>
+              </Grid>
+
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Líneas actuales</Typography>
+                <TableContainer component={Paper}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell><strong>Línea transportista</strong></TableCell>
+                        <TableCell><strong>Acciones</strong></TableCell>
+                        <TableCell><strong>Citas manuales</strong></TableCell>
+                        <TableCell><strong>Horario</strong></TableCell>
+                        <TableCell><strong>Citas generadas</strong></TableCell>
+                        <TableCell align="center"><strong>Enviar</strong></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {Object.keys(lineasTelefonosState).length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={6} align="center">No hay líneas registradas.</TableCell>
+                        </TableRow>
+                      )}
+                      {Object.keys(lineasTelefonosState).map((linea) => {
+                        const assignedCount = (lineFoliosState[linea] || []).length;
+                        const manualCount = Number(manualCounts[linea] || 0);
+                        const displayGenerated = assignedCount + (manualCount > 0 ? manualCount : 0);
+                        return (
+                          <TableRow key={linea}>
+                            <TableCell>
+                              <Typography variant="body2"><strong>{linea}</strong></Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Tel: {lineasTelefonosState[linea]} — Unidades: {lineasUnidadesState[linea] ?? 0}
+                              </Typography>
+                            </TableCell>
+
+                            <TableCell>
+                              <Stack direction="row" spacing={1}>
+                                <Button size="small" variant="outlined" onClick={() => openEditLineaDialog(linea)}>Modificar</Button>
+                                <Button size="small" variant="outlined" color="error" onClick={() => handleEliminarLinea(linea)}>Eliminar</Button>
+                              </Stack>
+                            </TableCell>
+
+                            <TableCell>
+                              <TextField
+                                size="small"
+                                type="number"
+                                value={manualCounts[linea] ?? ""}
+                                onChange={(e) => handleManualCountChange(linea, e.target.value)}
+                                placeholder="Cantidad"
+                              />
+                            </TableCell>
+
+                            <TableCell>
+                              <FormControl size="small" fullWidth>
+                                <Select
+                                  value={manualHorarios[linea] ?? ""}
+                                  onChange={(e) => handleManualHorarioChange(linea, e.target.value)}
+                                  displayEmpty
+                                >
+                                  <MenuItem value="">Selecciona horario</MenuItem>
+                                  {horariosArcelor.map((h) => (
+                                    <MenuItem key={h.label} value={h.label}>{h.label}</MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                            </TableCell>
+
+                            <TableCell>
+                              {displayGenerated}
+                            </TableCell>
+
+                            <TableCell align="center">
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="success"
+                                onClick={() => handlePrepareSendForLine(linea)}
+                              >
+                                Enviar citas
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            </Box>
+          )}
         </Box>
       )}
 
-      {/* -------------------- Diálogo de selección de remitente -------------------- */}
+      {/* ---------- Edit dialog ---------- */}
+      <Dialog open={editDialogOpen} onClose={handleEditCancel}>
+        <DialogTitle>Modificar línea transportista</DialogTitle>
+        <DialogContent>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+            Edita nombre, teléfono o unidades. Confirma para aplicar los cambios.
+          </Typography>
+          <TextField
+            label="Nombre de la línea"
+            value={editLineaNombre}
+            onChange={(e) => setEditLineaNombre(e.target.value)}
+            fullWidth
+            sx={{ mb: 2 }}
+            size="small"
+          />
+          <TextField
+            label="Teléfono (solo dígitos)"
+            value={editLineaTelefono}
+            onChange={(e) => setEditLineaTelefono(e.target.value)}
+            fullWidth
+            sx={{ mb: 2 }}
+            size="small"
+          />
+          <TextField
+            label="Unidades"
+            type="number"
+            value={editLineaUnidades}
+            onChange={(e) => setEditLineaUnidades(e.target.value)}
+            fullWidth
+            sx={{ mb: 1 }}
+            size="small"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleEditCancel}>Cancelar</Button>
+          <Button variant="contained" onClick={handleEditConfirm}>Confirmar cambios</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ---------- Send preview dialog ---------- */}
+      <Dialog open={sendPreviewOpen} onClose={() => setSendPreviewOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Confirmar envío por WhatsApp</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ whiteSpace: "pre-line" }}>{sendPreviewMessage}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSendPreviewOpen(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handleConfirmSendPreview}>Enviar ahora</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ---------- Contact dialog ---------- */}
       <Dialog open={contactDialogOpen} onClose={handleContactDialogCancel}>
         <DialogTitle>Selecciona el remitente (desde qué número enviar)</DialogTitle>
         <DialogContent>
@@ -946,7 +1282,7 @@ export default function App() {
 
           <Box sx={{ mt: 2 }}>
             <Typography variant="body2" color="text.secondary">
-              Se enviará un mensaje individual a cada línea transportista con su bloque de folios. El remitente seleccionado se mostrará en el texto del mensaje.
+              Se enviará un mensaje individual a cada línea transportista con su bloque de folios.
             </Typography>
           </Box>
         </DialogContent>
@@ -956,7 +1292,7 @@ export default function App() {
         </DialogActions>
       </Dialog>
 
-      {/* -------------------- Diálogo de autenticación para Administrador -------------------- */}
+      {/* ---------- Auth dialog ---------- */}
       <Dialog open={authDialogOpen} onClose={handleAuthCancel}>
         <DialogTitle>Autenticación requerida</DialogTitle>
         <DialogContent>
