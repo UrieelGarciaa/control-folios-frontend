@@ -25,8 +25,16 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Chip
+  Chip,
+  Checkbox,
+  FormControlLabel,
+  RadioGroup,
+  Radio,
+  FormLabel
 } from "@mui/material";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable"; // correct import for jspdf-autotable
 
 /* ---------- Paleta de colores ---------- */
 const COLORS = {
@@ -57,17 +65,20 @@ const formatDisplayDateTime = (isoDateTime) => {
   return `${date} ${time}`;
 };
 
-/* ---------- Horarios ---------- */
-const horariosArcelor = [
-  { label: "6:00am a 8:00am", inicio: 6, fin: 8 },
-  { label: "8:00am a 10:00am", inicio: 8, fin: 10 },
-  { label: "10:00am a 12:00pm", inicio: 10, fin: 12 },
-  { label: "12:00pm a 2:00pm", inicio: 12, fin: 14 },
-  { label: "2:00pm a 4:00pm", inicio: 14, fin: 16 },
-  { label: "4:00pm a 6:00pm", inicio: 16, fin: 18 }
-];
+/* ---------- Horarios 24h cada 2 horas ---------- */
+const generate24hRanges = () => {
+  const ranges = [];
+  for (let h = 0; h < 24; h += 2) {
+    const start = String(h).padStart(2, "0") + ":00";
+    const endHour = (h + 2) % 24;
+    const end = String(endHour).padStart(2, "0") + ":00";
+    ranges.push({ label: `${start}-${end}`, inicio: h, fin: (h + 2) % 24 });
+  }
+  return ranges;
+};
+const horariosArcelor = generate24hRanges();
 
-/* ---------- Valores iniciales para líneas y unidades ---------- */
+/* ---------- Valores iniciales para líneas y unidades (ejemplo) ---------- */
 const INITIAL_LINEAS_TELEFONOS = {
   "AUTO LINEAS PERALES SA DE CV": "8180118971",
   "JUAN MANUEL VALDES AGUILAR": "8661019151",
@@ -139,7 +150,7 @@ const getNextFolios = (count, fechaReferencia) => {
 
 /* ---------- Componente principal ---------- */
 export default function App() {
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState(1);
 
   /* TITSA rows (inicia vacío) */
   const [titsaRows, setTitsaRows] = useState([]);
@@ -166,7 +177,9 @@ export default function App() {
   const [dialogTargetId, setDialogTargetId] = useState(null);
   const [dialogEco, setDialogEco] = useState("");
 
-  /* Lines state (phones + units) and generated folios per line (assigned by repartition) */
+  /* Lines state (phones + units) and generated folios per line (assigned by repartition)
+     NOTE: lineFoliosState stores array of objects: { folio: number, horario: string }
+  */
   const [lineasTelefonosState, setLineasTelefonosState] = useState(() => ({ ...INITIAL_LINEAS_TELEFONOS }));
   const [lineasUnidadesState, setLineasUnidadesState] = useState(() => ({ ...INITIAL_LINEAS_UNIDADES }));
   const [lineFoliosState, setLineFoliosState] = useState(() => {
@@ -195,6 +208,21 @@ export default function App() {
   /* Per-row manual inputs (cantidad y horario) */
   const [manualCounts, setManualCounts] = useState({});
   const [manualHorarios, setManualHorarios] = useState({});
+
+  /* Contact dialog (bulk) - kept minimal and used */
+  const [contactDialogOpen, setContactDialogOpen] = useState(false);
+  const [selectedRemitente, setSelectedRemitente] = useState("Alan Bustos");
+  const [otroRemitenteTelefono, setOtroRemitenteTelefono] = useState("");
+  const [pendingMessagesByLine, setPendingMessagesByLine] = useState({});
+
+  /* Optional: selection of horarios for generator */
+  const [selectedHorariosArcelor, setSelectedHorariosArcelor] = useState([]);
+
+  /* New: generation modality and hourly range selection */
+  const [generationMode, setGenerationMode] = useState("every2h"); // 'every2h' or 'hourlyRange'
+  const [rangeStartHour, setRangeStartHour] = useState(6);
+  const [rangeEndHour, setRangeEndHour] = useState(14);
+  const [confirmRangeDialogOpen, setConfirmRangeDialogOpen] = useState(false);
 
   const idCounterRef = useRef(Date.now());
   const sendBufferRef = useRef({});
@@ -250,14 +278,7 @@ export default function App() {
 
       if (selectedHora) {
         const hp = r.horaProgramada || "";
-        const re = /(\d{1,2}):(\d{2})\s*(am|pm)/i;
-        const m = hp.match(re);
-        if (!m) return false;
-        let hour = parseInt(m[1], 10);
-        const ampm = m[3].toLowerCase();
-        if (ampm === "pm" && hour !== 12) hour += 12;
-        if (ampm === "am" && hour === 12) hour = 0;
-        if (!(hour >= selectedHora.inicio && hour < selectedHora.fin)) return false;
+        if (hp !== selectedHora.label) return false;
       }
 
       if (selectedEstado && selectedEstado !== "Total") {
@@ -337,26 +358,14 @@ export default function App() {
     setDialogOpen(false);
     setDialogTargetId(null);
     setDialogEco("");
-    // limpiar búsqueda para desfiltrar
     setTitsaSearch("");
   };
   const handleMarcarNoLlego = (id) => {
     setTitsaRows((prev) => prev.map((r) => (r.id === id ? { ...r, estado: "No llegó" } : r)));
-    // limpiar búsqueda para desfiltrar
     setTitsaSearch("");
   };
 
-  /* Contact dialog (bulk) */
-  const [contactDialogOpen, setContactDialogOpen] = useState(false);
-  const [selectedRemitente, setSelectedRemitente] = useState("Alan Bustos");
-  const [otroRemitenteTelefono, setOtroRemitenteTelefono] = useState("");
-  const [pendingMessagesByLine, setPendingMessagesByLine] = useState({});
-  const openContactDialogWithMessages = (messagesByLine) => {
-    setPendingMessagesByLine(messagesByLine || {});
-    setSelectedRemitente("Alan Bustos");
-    setOtroRemitenteTelefono("");
-    setContactDialogOpen(true);
-  };
+  /* Contact dialog handlers */
   const handleContactDialogCancel = () => {
     setContactDialogOpen(false);
     setPendingMessagesByLine({});
@@ -373,10 +382,33 @@ export default function App() {
     setContactDialogOpen(false);
   };
 
-  /* ---------- Generar distribución automática (reparte 210 folios respetando topes) ----------
-     - Updates lineFoliosState only (refreshes assignments).
-     - Does NOT add records to titsaRows.
-  */
+  /* ---------- Generar distribución automática (dos modalidades) ---------- */
+  const PER_SLOT = 35; // 35 folios por slot (modalidad original)
+
+  const handleGenerarAutomaticosClick = () => {
+    if (generationMode === "hourlyRange") {
+      if (rangeStartHour === null || rangeEndHour === null) {
+        alert("Selecciona un rango de horas válido.");
+        return;
+      }
+      let hoursCount = 0;
+      if (rangeStartHour === rangeEndHour) {
+        hoursCount = 24;
+      } else if (rangeStartHour < rangeEndHour) {
+        hoursCount = rangeEndHour - rangeStartHour;
+      } else {
+        hoursCount = (24 - rangeStartHour) + rangeEndHour;
+      }
+      if (hoursCount <= 0) {
+        alert("Rango de horas inválido.");
+        return;
+      }
+      setConfirmRangeDialogOpen(true);
+      return;
+    }
+    handleGenerarAutomaticos();
+  };
+
   const handleGenerarAutomaticos = () => {
     if (!canGenerate) {
       alert("Solo Administrador puede generar folios automáticos.");
@@ -386,7 +418,7 @@ export default function App() {
       alert("Selecciona una fecha válida.");
       return;
     }
-    if (!window.confirm("¿Desea repartir los 210 folios entre las líneas respetando el tope de unidades?")) return;
+    if (!window.confirm("¿Desea generar las citas con la modalidad seleccionada?")) return;
 
     const lines = Object.keys(lineasTelefonosState);
     if (lines.length === 0) {
@@ -394,67 +426,116 @@ export default function App() {
       return;
     }
 
-    const TOTAL_POR_DIA = 210;
-    const HORARIOS_COUNT = horariosArcelor.length;
-    const TOTAL_POR_HORARIO = Math.floor(TOTAL_POR_DIA / HORARIOS_COUNT); // 35
+    if (generationMode === "every2h") {
+      const horariosToUse = selectedHorariosArcelor.length > 0 ? horariosArcelor.filter(h => selectedHorariosArcelor.includes(h.label)) : horariosArcelor;
+      if (horariosToUse.length === 0) {
+        alert("Selecciona al menos un rango de 2 horas.");
+        return;
+      }
 
-    const assignedTotals = {};
-    lines.forEach((l) => (assignedTotals[l] = 0));
+      const newLineFolios = {};
+      lines.forEach((l) => (newLineFolios[l] = []));
+
+      horariosToUse.forEach((h) => {
+        const remainingCap = {};
+        let totalRemaining = 0;
+        lines.forEach((l) => {
+          const cap = lineasUnidadesState[l] || 0;
+          remainingCap[l] = cap;
+          totalRemaining += remainingCap[l];
+        });
+
+        if (totalRemaining <= 0) return;
+
+        const provisional = {};
+        let allocated = 0;
+        lines.forEach((l) => {
+          if (remainingCap[l] <= 0) {
+            provisional[l] = 0;
+            return;
+          }
+          const share = Math.floor((remainingCap[l] / totalRemaining) * PER_SLOT);
+          const take = Math.min(share, remainingCap[l]);
+          provisional[l] = take;
+          allocated += take;
+        });
+
+        let remainder = PER_SLOT - allocated;
+        if (remainder > 0) {
+          const sortable = lines.filter((l) => remainingCap[l] > provisional[l]).sort((a, b) => remainingCap[b] - remainingCap[a]);
+          let idx = 0;
+          while (remainder > 0 && sortable.length > 0) {
+            const l = sortable[idx % sortable.length];
+            if (provisional[l] < remainingCap[l]) {
+              provisional[l] += 1;
+              remainder -= 1;
+            }
+            idx += 1;
+            if (idx > sortable.length * 5) break;
+          }
+        }
+
+        lines.forEach((linea) => {
+          const count = provisional[linea] || 0;
+          if (!count || count <= 0) return;
+          const folios = getNextFolios(count, fechaGeneracion);
+          const objects = folios.map((f) => ({ folio: f, horario: h.label }));
+          newLineFolios[linea] = [...newLineFolios[linea], ...objects];
+        });
+      });
+
+      setLineFoliosState(() => {
+        const merged = {};
+        Object.keys(lineasTelefonosState).forEach((l) => {
+          merged[l] = newLineFolios[l] || [];
+        });
+        return merged;
+      });
+
+      alert("Distribución (modalidad cada 2 horas) completada. Revisa 'Citas generadas' por línea.");
+      return;
+    }
+
+    // hourlyRange
+    let hours = [];
+    if (rangeStartHour === rangeEndHour) {
+      for (let h = 0; h < 24; h++) hours.push(h);
+    } else if (rangeStartHour < rangeEndHour) {
+      for (let h = rangeStartHour; h < rangeEndHour; h++) hours.push(h);
+    } else {
+      for (let h = rangeStartHour; h < 24; h++) hours.push(h);
+      for (let h = 0; h < rangeEndHour; h++) hours.push(h);
+    }
+
+    if (hours.length === 0) {
+      alert("Rango de horas inválido.");
+      return;
+    }
+
     const newLineFolios = {};
     lines.forEach((l) => (newLineFolios[l] = []));
 
-    horariosArcelor.forEach(() => {
-      let foliosToAssign = TOTAL_POR_HORARIO;
+    lines.forEach((linea) => {
+      const unidades = lineasUnidadesState[linea] || 0;
+      if (unidades <= 0) return;
 
-      const remainingCap = {};
-      let totalRemaining = 0;
-      lines.forEach((l) => {
-        const cap = lineasUnidadesState[l] || 0;
-        const rem = Math.max(0, cap - assignedTotals[l]);
-        remainingCap[l] = rem;
-        totalRemaining += rem;
-      });
+      const hoursCount = hours.length;
+      const base = Math.floor(unidades / hoursCount);
+      let remainder = unidades - base * hoursCount;
 
-      if (totalRemaining <= 0) return;
+      hours.forEach((hour) => {
+        const unitsThisHour = base + (remainder > 0 ? 1 : 0);
+        if (remainder > 0) remainder -= 1;
+        if (unitsThisHour <= 0) return;
 
-      const provisional = {};
-      let allocated = 0;
-      lines.forEach((l) => {
-        if (remainingCap[l] <= 0) {
-          provisional[l] = 0;
-          return;
-        }
-        const share = Math.floor((remainingCap[l] / totalRemaining) * foliosToAssign);
-        const take = Math.min(share, remainingCap[l]);
-        provisional[l] = take;
-        allocated += take;
-      });
-
-      let remainder = foliosToAssign - allocated;
-      if (remainder > 0) {
-        const sortable = lines.filter((l) => remainingCap[l] > provisional[l]).sort((a, b) => remainingCap[b] - remainingCap[a]);
-        let idx = 0;
-        while (remainder > 0 && sortable.length > 0) {
-          const l = sortable[idx % sortable.length];
-          if (provisional[l] < remainingCap[l]) {
-            provisional[l] += 1;
-            remainder -= 1;
-          }
-          idx += 1;
-          if (idx > sortable.length * 5) break;
-        }
-      }
-
-      lines.forEach((linea) => {
-        const count = provisional[linea] || 0;
-        if (!count || count <= 0) return;
-        const folios = getNextFolios(count, fechaGeneracion);
-        newLineFolios[linea] = [...newLineFolios[linea], ...folios];
-        assignedTotals[linea] += count;
+        const next = (hour + 1) % 24;
+        const horarioLabel = `${String(hour).padStart(2, "0")}:00-${String(next).padStart(2, "0")}:00`;
+        const folios = getNextFolios(unitsThisHour, fechaGeneracion);
+        const objects = folios.map((f) => ({ folio: f, horario: horarioLabel }));
+        newLineFolios[linea] = [...newLineFolios[linea], ...objects];
       });
     });
 
-    // Replace previous assignments (refresh)
     setLineFoliosState(() => {
       const merged = {};
       Object.keys(lineasTelefonosState).forEach((l) => {
@@ -463,13 +544,18 @@ export default function App() {
       return merged;
     });
 
-    alert("Distribución completada. Revisa 'Citas generadas' por línea. Usa 'Enviar citas' por línea para mandar los mensajes.");
+    alert("Distribución (modalidad hora a hora) completada. Revisa 'Citas generadas' por línea.");
   };
 
-  /* ---------- Preparar y enviar por línea ----------
-     - Uses assigned folios (lineFoliosState) or manualCount override.
-     - On confirm: creates titsaRows entries and clears assigned folios for that line.
-  */
+  const confirmRangeAndGenerate = () => {
+    setConfirmRangeDialogOpen(false);
+    if (!window.confirm(`Confirmar generación hora a hora desde ${String(rangeStartHour).padStart(2, "0")}:00 hasta ${String(rangeEndHour).padStart(2, "0")}:00 ?`)) {
+      return;
+    }
+    handleGenerarAutomaticos();
+  };
+
+  /* ---------- Preparar y enviar por línea ---------- */
   const handlePrepareSendForLine = (linea) => {
     const tel = (lineasTelefonosState[linea] || "").replace(/\D/g, "");
     if (!tel) {
@@ -477,122 +563,121 @@ export default function App() {
       return;
     }
 
-    const assigned = (lineFoliosState[linea] || []).slice();
+    const assignedObjects = (lineFoliosState[linea] || []).slice();
     const manualCount = Number(manualCounts[linea] || 0);
+    const manualHorario = manualHorarios[linea] || "";
 
-    let foliosToSend = [];
+    let foliosToSendObjects = [];
+
     if (manualCount > 0) {
-      foliosToSend = getNextFolios(manualCount, fechaGeneracion);
-    } else if (assigned.length > 0) {
-      foliosToSend = assigned.slice();
+      const folios = getNextFolios(manualCount, fechaGeneracion);
+      if (manualHorario) {
+        foliosToSendObjects = folios.map((f) => ({ folio: f, horario: manualHorario }));
+      } else {
+        const horariosToUse = selectedHorariosArcelor.length > 0 ? horariosArcelor.filter(h => selectedHorariosArcelor.includes(h.label)) : horariosArcelor;
+        const count = folios.length;
+        const base = Math.floor(count / horariosToUse.length) || 1;
+        let remainder = count - base * horariosToUse.length;
+        let idx = 0;
+        horariosToUse.forEach((h) => {
+          const take = base + (remainder > 0 ? 1 : 0);
+          remainder = Math.max(0, remainder - 1);
+          const slice = folios.slice(idx, idx + take);
+          slice.forEach((f) => foliosToSendObjects.push({ folio: f, horario: h.label }));
+          idx += take;
+        });
+      }
+    } else if (assignedObjects.length > 0) {
+      foliosToSendObjects = assignedObjects.slice();
     } else {
       const unidades = lineasUnidadesState[linea] || 0;
       if (unidades <= 0) {
         alert("La línea no tiene unidades configuradas.");
         return;
       }
-      foliosToSend = getNextFolios(unidades, fechaGeneracion);
+      const folios = getNextFolios(unidades, fechaGeneracion);
+      if (manualHorario) {
+        foliosToSendObjects = folios.map((f) => ({ folio: f, horario: manualHorario }));
+      } else {
+        const horariosToUse = selectedHorariosArcelor.length > 0 ? horariosArcelor.filter(h => selectedHorariosArcelor.includes(h.label)) : horariosArcelor;
+        const count = folios.length;
+        const base = Math.floor(count / horariosToUse.length) || 1;
+        let remainder = count - base * horariosToUse.length;
+        let idx = 0;
+        horariosToUse.forEach((h) => {
+          const take = base + (remainder > 0 ? 1 : 0);
+          remainder = Math.max(0, remainder - 1);
+          const slice = folios.slice(idx, idx + take);
+          slice.forEach((f) => foliosToSendObjects.push({ folio: f, horario: h.label }));
+          idx += take;
+        });
+      }
     }
 
-    // Build message: include date, line name, "Citas asignadas" and list folios grouped by horario evenly (no "Otros")
-    let mensaje = `📅 Fecha: ${formatDisplayDate(fechaGeneracion)}\n🚚 Línea de transporte: ${linea}\n\n`;
-    mensaje += `Citas asignadas:\n\n`;
+    if (foliosToSendObjects.length === 0) {
+      alert("No hay folios para enviar.");
+      return;
+    }
 
-    const count = foliosToSend.length;
-    const base = Math.floor(count / horariosArcelor.length);
-    let remainder = count - base * horariosArcelor.length;
-    let idx = 0;
-
-    horariosArcelor.forEach((h) => {
-      const take = base + (remainder > 0 ? 1 : 0);
-      remainder = Math.max(0, remainder - 1);
-      const slice = foliosToSend.slice(idx, idx + take);
-      if (slice.length > 0) {
-        mensaje += `🕒 ${h.label}\n`;
-        slice.forEach((f) => (mensaje += `- ${f}\n`));
-        mensaje += `\n`;
-      }
-      idx += take;
+    const grouped = {};
+    foliosToSendObjects.forEach((o) => {
+      const h = o.horario || "";
+      if (!grouped[h]) grouped[h] = [];
+      grouped[h].push(o.folio);
     });
 
-    mensaje += `👉 Favor de presentarse en patio con todo el equipo completo de sujeción de rollo y 🦺 EPP completo.`;
+    let mensaje = `Fecha: ${formatDisplayDate(fechaGeneracion)}\nLínea: ${linea}\n\nCitas asignadas:\n\n`;
+    Object.keys(grouped).forEach((h) => {
+      mensaje += `${h}\n`;
+      grouped[h].forEach((f) => (mensaje += `- ${f}\n`));
+      mensaje += `\n`;
+    });
 
-    // preview
+    mensaje += `👉 Favor de presentarse en patio con todo el equipo completo de sujeción de rollo y 🦺 EPP completo.\n`;
+    mensaje += `Favor de respetar el horario del folio asignado, caso omiso será sancionado.\n`;
+
     setSendPreviewLine(linea);
     setSendPreviewTel(tel);
     setSendPreviewMessage(mensaje);
     setSendPreviewOpen(true);
 
-    // store foliosToSend in buffer for confirm
-    sendBufferRef.current[linea] = foliosToSend;
+    sendBufferRef.current[linea] = foliosToSendObjects;
   };
 
   const handleConfirmSendPreview = () => {
     const linea = sendPreviewLine;
     const tel = sendPreviewTel;
-    const foliosToSend = sendBufferRef.current[linea] || [];
+    const foliosToSendObjects = sendBufferRef.current[linea] || [];
 
-    if (!foliosToSend || foliosToSend.length === 0) {
+    if (!foliosToSendObjects || foliosToSendObjects.length === 0) {
       alert("No hay folios para enviar.");
       setSendPreviewOpen(false);
       return;
     }
 
-    // Create titsaRows entries for each folio and assign horarios:
-    const manualHorario = manualHorarios[linea] || "";
     const nuevosRegistros = [];
-    const count = foliosToSend.length;
-
-    if (manualHorario) {
-      foliosToSend.forEach((f) => {
-        idCounterRef.current += 1;
-        nuevosRegistros.push({
-          id: idCounterRef.current,
-          fecha: fechaGeneracion,
-          folio: f,
-          horaProgramada: manualHorario,
-          linea,
-          estado: "Pendiente",
-          eco: "",
-          fechaHoraLlegada: ""
-        });
+    foliosToSendObjects.forEach((o) => {
+      idCounterRef.current += 1;
+      nuevosRegistros.push({
+        id: idCounterRef.current,
+        fecha: fechaGeneracion,
+        folio: o.folio,
+        horaProgramada: o.horario || "",
+        linea,
+        estado: "Pendiente",
+        eco: "",
+        fechaHoraLlegada: ""
       });
-    } else {
-      const base = Math.floor(count / horariosArcelor.length) || 1;
-      let remainder = count - base * horariosArcelor.length;
-      let idx = 0;
-      horariosArcelor.forEach((h) => {
-        const take = base + (remainder > 0 ? 1 : 0);
-        remainder = Math.max(0, remainder - 1);
-        const slice = foliosToSend.slice(idx, idx + take);
-        slice.forEach((f) => {
-          idCounterRef.current += 1;
-          nuevosRegistros.push({
-            id: idCounterRef.current,
-            fecha: fechaGeneracion,
-            folio: f,
-            horaProgramada: h.label,
-            linea,
-            estado: "Pendiente",
-            eco: "",
-            fechaHoraLlegada: ""
-          });
-        });
-        idx += take;
-      });
-    }
+    });
 
-    // Add to titsaRows (these are the actual records)
     setTitsaRows((prev) => [...prev, ...nuevosRegistros]);
 
-    // Clear assigned folios for that line (so repartition will refresh next time)
     setLineFoliosState((prev) => {
       const copy = { ...prev };
       copy[linea] = [];
       return copy;
     });
 
-    // Clear manual inputs for that line
     setManualCounts((prev) => {
       const copy = { ...prev };
       delete copy[linea];
@@ -604,10 +689,8 @@ export default function App() {
       return copy;
     });
 
-    // Clear send buffer
     delete sendBufferRef.current[linea];
 
-    // Open WhatsApp with the preview message
     const url = `https://wa.me/52${tel}?text=${encodeURIComponent(sendPreviewMessage)}`;
     window.open(url, "_blank");
 
@@ -760,18 +843,16 @@ export default function App() {
     setManualHorarios((prev) => ({ ...prev, [linea]: value }));
   };
 
-  /* ---------- Export helpers (Agrupar folios por línea + horario en una sola celda) ---------- */
+  /* ---------- Export helpers (incluye titsaRows y lineFoliosState) ---------- */
   const buildExportData = () => {
-    // Build rows grouped by fecha (use fechaGeneracion) -> linea -> horario -> folios array
     const rows = [];
     const fechaKey = fechaGeneracion || mainFecha;
 
+    // 1) Include titsaRows (records already created / sent)
     Object.keys(lineasTelefonosState).forEach((linea) => {
-      // collect folios from titsaRows for this line and selected fecha
       const folios = titsaRows.filter((r) => r.linea === linea && r.fecha === fechaKey);
       if (folios.length === 0) return;
 
-      // group by horario
       const horariosMap = {};
       folios.forEach((f) => {
         const h = f.horaProgramada || "";
@@ -784,7 +865,29 @@ export default function App() {
           fecha: formatDisplayDate(fechaKey),
           linea,
           horario,
-          folios: horariosMap[horario] // array of folios (will join later)
+          folios: horariosMap[horario]
+        });
+      });
+    });
+
+    // 2) Include pending generated folios in lineFoliosState (not yet sent)
+    Object.keys(lineFoliosState).forEach((linea) => {
+      const pending = (lineFoliosState[linea] || []).filter((f) => f && f.folio);
+      if (pending.length === 0) return;
+
+      const horariosMap = {};
+      pending.forEach((p) => {
+        const h = p.horario || "";
+        if (!horariosMap[h]) horariosMap[h] = [];
+        horariosMap[h].push(p.folio);
+      });
+
+      Object.keys(horariosMap).forEach((horario) => {
+        rows.push({
+          fecha: formatDisplayDate(fechaKey),
+          linea,
+          horario,
+          folios: horariosMap[horario]
         });
       });
     });
@@ -802,21 +905,16 @@ export default function App() {
       alert("No hay folios generados para exportar en la fecha seleccionada.");
       return;
     }
-    import("xlsx").then((XLSX) => {
-      const sheetData = rowsToExport.map((r) => ({
-        Fecha: r.fecha,
-        Línea: r.linea,
-        Horario: r.horario,
-        Folios: r.folios.join(", ")
-      }));
-      const ws = XLSX.utils.json_to_sheet(sheetData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Citas");
-      XLSX.writeFile(wb, `citas_${(fechaGeneracion || mainFecha).replace(/-/g, "")}.xlsx`);
-    }).catch((err) => {
-      console.error(err);
-      alert("Error al exportar Excel.");
-    });
+    const sheetData = rowsToExport.map((r) => ({
+      Fecha: r.fecha,
+      Línea: r.linea,
+      Horario: r.horario,
+      Folios: r.folios.join(", ")
+    }));
+    const ws = XLSX.utils.json_to_sheet(sheetData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Citas");
+    XLSX.writeFile(wb, `citas_${(fechaGeneracion || mainFecha).replace(/-/g, "")}.xlsx`);
   };
 
   const handleExportPDF = () => {
@@ -829,18 +927,12 @@ export default function App() {
       alert("No hay folios generados para exportar en la fecha seleccionada.");
       return;
     }
-    import("jspdf").then((jsPDF) => {
-      import("jspdf-autotable").then(() => {
-        const doc = new jsPDF.default();
-        const head = [["Fecha", "Línea", "Horario", "Folios"]];
-        const body = rowsToExport.map((r) => [r.fecha, r.linea, r.horario, r.folios.join(", ")]);
-        doc.autoTable({ head, body, styles: { fontSize: 9 } });
-        doc.save(`citas_${(fechaGeneracion || mainFecha).replace(/-/g, "")}.pdf`);
-      });
-    }).catch((err) => {
-      console.error(err);
-      alert("Error al exportar PDF.");
-    });
+
+    const doc = new jsPDF();
+    const head = [["Fecha", "Línea", "Horario", "Folios"]];
+    const body = rowsToExport.map((r) => [r.fecha, r.linea, r.horario, r.folios.join(", ")]);
+    autoTable(doc, { head, body, styles: { fontSize: 9 } });
+    doc.save(`citas_${(fechaGeneracion || mainFecha).replace(/-/g, "")}.pdf`);
   };
 
   /* ---------- Render ---------- */
@@ -878,61 +970,25 @@ export default function App() {
         <Box>
           <Grid container spacing={2} sx={{ mb: 2 }} alignItems="center">
             <Grid item xs={12} md={2}>
-              <Paper
-                sx={{
-                  p: 2,
-                  textAlign: "center",
-                  cursor: "pointer",
-                  bgcolor: selectedEstado === "Total" ? "primary.main" : COLORS.totalBg,
-                  color: selectedEstado === "Total" ? "#fff" : "inherit"
-                }}
-                onClick={() => toggleEstadoFilter("Total")}
-              >
+              <Paper sx={{ p: 2, textAlign: "center", cursor: "pointer", bgcolor: selectedEstado === "Total" ? "primary.main" : COLORS.totalBg, color: selectedEstado === "Total" ? "#fff" : "inherit" }} onClick={() => toggleEstadoFilter("Total")}>
                 <Typography variant="subtitle2">Total (día)</Typography>
                 <Typography variant="h6">{totalCountForDay}</Typography>
               </Paper>
             </Grid>
             <Grid item xs={12} md={2}>
-              <Paper
-                sx={{
-                  p: 2,
-                  textAlign: "center",
-                  cursor: "pointer",
-                  bgcolor: selectedEstado === "Pendiente" ? "primary.main" : COLORS.pendientesBg,
-                  color: selectedEstado === "Pendiente" ? "#fff" : COLORS.pendientesText
-                }}
-                onClick={() => toggleEstadoFilter("Pendiente")}
-              >
+              <Paper sx={{ p: 2, textAlign: "center", cursor: "pointer", bgcolor: selectedEstado === "Pendiente" ? "primary.main" : COLORS.pendientesBg, color: selectedEstado === "Pendiente" ? "#fff" : COLORS.pendientesText }} onClick={() => toggleEstadoFilter("Pendiente")}>
                 <Typography variant="subtitle2">Pendientes</Typography>
                 <Typography variant="h6">{pendientesCount}</Typography>
               </Paper>
             </Grid>
             <Grid item xs={12} md={2}>
-              <Paper
-                sx={{
-                  p: 2,
-                  textAlign: "center",
-                  cursor: "pointer",
-                  bgcolor: selectedEstado === "Llegó" ? "primary.main" : COLORS.llegoBg,
-                  color: selectedEstado === "Llegó" ? "#fff" : COLORS.llegoText
-                }}
-                onClick={() => toggleEstadoFilter("Llegó")}
-              >
+              <Paper sx={{ p: 2, textAlign: "center", cursor: "pointer", bgcolor: selectedEstado === "Llegó" ? "primary.main" : COLORS.llegoBg, color: selectedEstado === "Llegó" ? "#fff" : COLORS.llegoText }} onClick={() => toggleEstadoFilter("Llegó")}>
                 <Typography variant="subtitle2">Llegados</Typography>
                 <Typography variant="h6">{llegadosCount}</Typography>
               </Paper>
             </Grid>
             <Grid item xs={12} md={2}>
-              <Paper
-                sx={{
-                  p: 2,
-                  textAlign: "center",
-                  cursor: "pointer",
-                  bgcolor: selectedEstado === "No llegó" ? "primary.main" : COLORS.noLlegoBg,
-                  color: selectedEstado === "No llegó" ? "#fff" : COLORS.noLlegoText
-                }}
-                onClick={() => toggleEstadoFilter("No llegó")}
-              >
+              <Paper sx={{ p: 2, textAlign: "center", cursor: "pointer", bgcolor: selectedEstado === "No llegó" ? "primary.main" : COLORS.noLlegoBg, color: selectedEstado === "No llegó" ? "#fff" : COLORS.noLlegoText }} onClick={() => toggleEstadoFilter("No llegó")}>
                 <Typography variant="subtitle2">No Llegados</Typography>
                 <Typography variant="h6">{noLlegadosCount}</Typography>
               </Paper>
@@ -951,45 +1007,28 @@ export default function App() {
             </Grid>
 
             <Grid item xs={4} md={1}>
-              <Button
-                variant="outlined"
-                size="small"
-                fullWidth
-                onClick={() => setShowHistorial((s) => !s)}
-              >
+              <Button variant="outlined" size="small" fullWidth onClick={() => setShowHistorial((s) => !s)}>
                 {showHistorial ? "Ver solo pendientes" : "Ver todos"}
               </Button>
             </Grid>
           </Grid>
 
-          <Typography variant="h6" gutterBottom>Horarios de Entrada</Typography>
+          <Typography variant="h6" gutterBottom>Horarios de Entrada (cada 2 horas, 24h)</Typography>
           <Box sx={{ display: "flex", gap: 1, mb: 1, flexWrap: "wrap", alignItems: "center" }}>
             {horariosArcelor.map((h, idx) => (
-              <Button
-                key={h.label}
-                variant={selectedHora?.label === h.label ? "contained" : "outlined"}
-                color={selectedHora?.label === h.label ? "primary" : "inherit"}
-                size="small"
-                onClick={() => toggleHoraFilter(h)}
-              >
+              <Button key={h.label} variant={selectedHora?.label === h.label ? "contained" : "outlined"} color={selectedHora?.label === h.label ? "primary" : "inherit"} size="small" onClick={() => toggleHoraFilter(h)}>
                 {`${h.label} (${horarioCounts[idx] || 0})`}
               </Button>
             ))}
           </Box>
 
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
-            Última hora para ingresar unidades 06:00pm
+            Última hora para ingresar unidades 18:00
           </Typography>
 
           <Grid container spacing={2} sx={{ mb: 2 }}>
             <Grid item xs={12}>
-              <TextField
-                label="Buscar Folio"
-                value={titsaSearch}
-                onChange={(e) => setTitsaSearch(e.target.value)}
-                fullWidth
-                size="small"
-              />
+              <TextField label="Buscar Folio" value={titsaSearch} onChange={(e) => setTitsaSearch(e.target.value)} fullWidth size="small" />
             </Grid>
           </Grid>
 
@@ -1040,22 +1079,8 @@ export default function App() {
                       <Stack direction="row" spacing={1} justifyContent="flex-end">
                         {canChangeEstado && row.estado === "Pendiente" && (
                           <>
-                            <Button
-                              size="small"
-                              color="success"
-                              variant="contained"
-                              onClick={() => openLlegoDialog(row.id)}
-                            >
-                              LLEGÓ
-                            </Button>
-                            <Button
-                              size="small"
-                              color="error"
-                              variant="contained"
-                              onClick={() => handleMarcarNoLlego(row.id)}
-                            >
-                              NO LLEGÓ
-                            </Button>
+                            <Button size="small" color="success" variant="contained" onClick={() => openLlegoDialog(row.id)}>LLEGÓ</Button>
+                            <Button size="small" color="error" variant="contained" onClick={() => handleMarcarNoLlego(row.id)}>NO LLEGÓ</Button>
                           </>
                         )}
                       </Stack>
@@ -1069,14 +1094,7 @@ export default function App() {
           <Dialog open={dialogOpen} onClose={handleDialogCancel}>
             <DialogTitle>Escribe el No eco que llegó</DialogTitle>
             <DialogContent>
-              <TextField
-                autoFocus
-                margin="dense"
-                label="No eco"
-                fullWidth
-                value={dialogEco}
-                onChange={(e) => setDialogEco(e.target.value)}
-              />
+              <TextField autoFocus margin="dense" label="No eco" fullWidth value={dialogEco} onChange={(e) => setDialogEco(e.target.value)} />
             </DialogContent>
             <DialogActions>
               <Button onClick={handleDialogCancel}>Cancelar</Button>
@@ -1129,26 +1147,171 @@ export default function App() {
 
           <Grid container spacing={4} sx={{ mb: 2 }}>
             <Grid item xs={12} md={6}>
-              <Typography variant="subtitle1" gutterBottom>Folios automáticos (repartir 210)</Typography>
+              <Typography variant="subtitle1" gutterBottom>Folios automáticos (repartir)</Typography>
 
-              <TextField
-                label="Fecha"
-                type="date"
-                value={fechaGeneracion}
-                onChange={(e) => setFechaGeneracion(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                fullWidth
-                sx={{ mb: 2 }}
-                size="small"
-              />
+              <Box sx={{ mb: 2 }}>
+                <FormLabel component="legend">Modalidad de generación</FormLabel>
+                <RadioGroup
+                  row
+                  value={generationMode}
+                  onChange={(e) => setGenerationMode(e.target.value)}
+                >
+                  <FormControlLabel value="every2h" control={<Radio />} label="Citas cada 2 horas" />
+                  <FormControlLabel value="hourlyRange" control={<Radio />} label="Citas cada hora" />
+                </RadioGroup>
+              </Box>
+
+              {userRole === "Administrador" ? (
+                <TextField
+                  label="Fecha"
+                  type="date"
+                  value={fechaGeneracion}
+                  onChange={(e) => setFechaGeneracion(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  fullWidth
+                  sx={{ mb: 2 }}
+                  size="small"
+                />
+              ) : (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" color="text.secondary">Acceso restringido: seleccione rol Administrador para generar folios.</Typography>
+                </Box>
+              )}
+
+              {userRole === "Administrador" && (
+                <>
+                  {generationMode === "every2h" && (
+                    <>
+                      <Typography variant="caption" display="block" sx={{ mb: 1 }}>
+                        Selecciona los rangos de 2 horas para asignar citas (35 folios por rango).
+                      </Typography>
+
+                      <Grid container spacing={2} sx={{ mb: 2 }}>
+                        <Grid item xs={12} md={4}>
+                          <Typography variant="subtitle2" sx={{ mb: 1 }}>6:00 - 14:00</Typography>
+                          {horariosArcelor
+                            .filter(h => h.inicio >= 6 && h.inicio < 14)
+                            .map(h => (
+                              <FormControlLabel
+                                key={h.label}
+                                control={
+                                  <Checkbox
+                                    checked={selectedHorariosArcelor.includes(h.label)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedHorariosArcelor(prev => [...prev, h.label]);
+                                      } else {
+                                        setSelectedHorariosArcelor(prev => prev.filter(x => x !== h.label));
+                                      }
+                                    }}
+                                  />
+                                }
+                                label={h.label}
+                              />
+                            ))}
+                        </Grid>
+
+                        <Grid item xs={12} md={4}>
+                          <Typography variant="subtitle2" sx={{ mb: 1 }}>14:00 - 22:00</Typography>
+                          {horariosArcelor
+                            .filter(h => h.inicio >= 14 && h.inicio < 22)
+                            .map(h => (
+                              <FormControlLabel
+                                key={h.label}
+                                control={
+                                  <Checkbox
+                                    checked={selectedHorariosArcelor.includes(h.label)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedHorariosArcelor(prev => [...prev, h.label]);
+                                      } else {
+                                        setSelectedHorariosArcelor(prev => prev.filter(x => x !== h.label));
+                                      }
+                                    }}
+                                  />
+                                }
+                                label={h.label}
+                              />
+                            ))}
+                        </Grid>
+
+                        <Grid item xs={12} md={4}>
+                          <Typography variant="subtitle2" sx={{ mb: 1 }}>22:00 - 6:00</Typography>
+                          {horariosArcelor
+                            .filter(h => h.inicio >= 22 || h.inicio < 6)
+                            .map(h => (
+                              <FormControlLabel
+                                key={h.label}
+                                control={
+                                  <Checkbox
+                                    checked={selectedHorariosArcelor.includes(h.label)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedHorariosArcelor(prev => [...prev, h.label]);
+                                      } else {
+                                        setSelectedHorariosArcelor(prev => prev.filter(x => x !== h.label));
+                                      }
+                                    }}
+                                  />
+                                }
+                                label={h.label}
+                              />
+                            ))}
+                        </Grid>
+                      </Grid>
+                    </>
+                  )}
+
+                  {generationMode === "hourlyRange" && (
+                    <>
+                      <Typography variant="caption" display="block" sx={{ mb: 1 }}>
+                        Selecciona el rango hora a hora. Se repartirán las unidades de cada línea entre las horas del rango.
+                      </Typography>
+
+                      <Grid container spacing={2} sx={{ mb: 2 }}>
+                        <Grid item xs={6} md={6}>
+                          <FormControl fullWidth size="small">
+                            <InputLabel id="start-hour-label">Hora inicio</InputLabel>
+                            <Select
+                              labelId="start-hour-label"
+                              value={rangeStartHour}
+                              label="Hora inicio"
+                              onChange={(e) => setRangeStartHour(Number(e.target.value))}
+                            >
+                              {Array.from({ length: 24 }).map((_, i) => (
+                                <MenuItem key={i} value={i}>{String(i).padStart(2, "0")}:00</MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                        <Grid item xs={6} md={6}>
+                          <FormControl fullWidth size="small">
+                            <InputLabel id="end-hour-label">Hora fin</InputLabel>
+                            <Select
+                              labelId="end-hour-label"
+                              value={rangeEndHour}
+                              label="Hora fin"
+                              onChange={(e) => setRangeEndHour(Number(e.target.value))}
+                            >
+                              {Array.from({ length: 24 }).map((_, i) => (
+                                <MenuItem key={i} value={i}>{String(i).padStart(2, "0")}:00</MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                      </Grid>
+                    </>
+                  )}
+                </>
+              )}
 
               <Button
                 variant="contained"
                 color="primary"
-                onClick={handleGenerarAutomaticos}
+                onClick={handleGenerarAutomaticosClick}
                 disabled={!canGenerate}
               >
-                Repartir folios entre líneas (210)
+                Repartir folios entre líneas
               </Button>
             </Grid>
 
@@ -1162,39 +1325,37 @@ export default function App() {
             </Grid>
           </Grid>
 
-          {/* ---------- Gestión de líneas (solo Administrador) ---------- */}
+          <Dialog open={confirmRangeDialogOpen} onClose={() => setConfirmRangeDialogOpen(false)}>
+            <DialogTitle>Confirmar rango horario</DialogTitle>
+            <DialogContent>
+              <Typography>
+                Confirmar generación hora a hora desde{" "}
+                <strong>{String(rangeStartHour).padStart(2, "0")}:00</strong> hasta{" "}
+                <strong>{String(rangeEndHour).padStart(2, "0")}:00</strong>.
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+                Se repartirán las unidades configuradas por cada línea entre las horas del rango seleccionado.
+              </Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setConfirmRangeDialogOpen(false)}>Cancelar</Button>
+              <Button variant="contained" onClick={confirmRangeAndGenerate}>Confirmar y generar</Button>
+            </DialogActions>
+          </Dialog>
+
           {userRole === "Administrador" && (
             <Box sx={{ mt: 3 }}>
               <Typography variant="h6" gutterBottom>Gestión de líneas transportistas</Typography>
 
               <Grid container spacing={2}>
                 <Grid item xs={12} md={5}>
-                  <TextField
-                    label="Nombre de la línea"
-                    value={nuevaLineaNombre}
-                    onChange={(e) => setNuevaLineaNombre(e.target.value)}
-                    fullWidth
-                    size="small"
-                  />
+                  <TextField label="Nombre de la línea" value={nuevaLineaNombre} onChange={(e) => setNuevaLineaNombre(e.target.value)} fullWidth size="small" />
                 </Grid>
                 <Grid item xs={12} md={3}>
-                  <TextField
-                    label="Teléfono (solo dígitos)"
-                    value={nuevaLineaTelefono}
-                    onChange={(e) => setNuevaLineaTelefono(e.target.value)}
-                    fullWidth
-                    size="small"
-                  />
+                  <TextField label="Teléfono (solo dígitos)" value={nuevaLineaTelefono} onChange={(e) => setNuevaLineaTelefono(e.target.value)} fullWidth size="small" />
                 </Grid>
                 <Grid item xs={12} md={2}>
-                  <TextField
-                    label="Unidades"
-                    type="number"
-                    value={nuevaLineaUnidades}
-                    onChange={(e) => setNuevaLineaUnidades(e.target.value)}
-                    fullWidth
-                    size="small"
-                  />
+                  <TextField label="Unidades" type="number" value={nuevaLineaUnidades} onChange={(e) => setNuevaLineaUnidades(e.target.value)} fullWidth size="small" />
                 </Grid>
                 <Grid item xs={12} md={2}>
                   <Button variant="contained" onClick={handleAgregarLinea} fullWidth>Agregar línea</Button>
@@ -1222,7 +1383,8 @@ export default function App() {
                         </TableRow>
                       )}
                       {Object.keys(lineasTelefonosState).map((linea) => {
-                        const assignedCount = (lineFoliosState[linea] || []).length;
+                        const assignedObjects = (lineFoliosState[linea] || []);
+                        const assignedCount = assignedObjects.length;
                         const manualCount = Number(manualCounts[linea] || 0);
                         const displayGenerated = assignedCount + (manualCount > 0 ? manualCount : 0);
                         return (
@@ -1292,7 +1454,7 @@ export default function App() {
         </Box>
       )}
 
-      {/* ---------- Edit dialog ---------- */}
+      {/* Edit dialog */}
       <Dialog open={editDialogOpen} onClose={handleEditCancel}>
         <DialogTitle>Modificar línea transportista</DialogTitle>
         <DialogContent>
@@ -1331,7 +1493,7 @@ export default function App() {
         </DialogActions>
       </Dialog>
 
-      {/* ---------- Send preview dialog ---------- */}
+      {/* Send preview dialog */}
       <Dialog open={sendPreviewOpen} onClose={() => setSendPreviewOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Confirmar envío por WhatsApp</DialogTitle>
         <DialogContent>
@@ -1343,7 +1505,7 @@ export default function App() {
         </DialogActions>
       </Dialog>
 
-      {/* ---------- Contact dialog ---------- */}
+      {/* Contact dialog */}
       <Dialog open={contactDialogOpen} onClose={handleContactDialogCancel}>
         <DialogTitle>Selecciona el remitente (desde qué número enviar)</DialogTitle>
         <DialogContent>
@@ -1383,7 +1545,7 @@ export default function App() {
         </DialogActions>
       </Dialog>
 
-      {/* ---------- Auth dialog ---------- */}
+      {/* Auth dialog */}
       <Dialog open={authDialogOpen} onClose={handleAuthCancel}>
         <DialogTitle>Autenticación requerida</DialogTitle>
         <DialogContent>
